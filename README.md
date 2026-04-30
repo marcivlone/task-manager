@@ -33,20 +33,20 @@
 
 В файле db.js укажите свои параметры подключения:
 
-javascript
-const { Pool } = require('pg');
+```javascript
+   const { Pool } = require('pg');
 
-const pool = new Pool({
-  user: 'postgres',
-  host: 'localhost',
-  database: 'taskdb',
-  password: 'ваш_пароль',
-  port: 5432,
-});
+   const pool = new Pool({
+     user: 'postgres',
+     host: 'localhost',
+     database: 'taskdb',
+     password: 'ваш_пароль',
+     port: 5432,
+   });
 
 module.exports = pool;
 4. **Запустите сервер**
-bash
+```bash
 node server.js
 5. **Откройте в браузере**
 Перейдите по адресу: http://localhost:3000
