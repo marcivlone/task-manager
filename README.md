@@ -23,30 +23,51 @@
    ```bash
    git clone https://github.com/marcivlone/task-manager.git
    cd task-manager
-2. Установите зависимости:
+2. **Установите зависимости:**
    ```bash
    npm install
-4. Настройте базу данных PostgreSQL:
+3. **Настройте базу данных PostgreSQL:**
 
-Убедитесь, что PostgreSQL запущен.
+- **Убедитесь, что PostgreSQL запущен.**
 
-Создайте базу данных taskdb.
+- **Создайте базу данных taskdb.**
 
-В файле db.js укажите свои параметры подключения (пароль и т.д.).
+- **В файле db.js укажите свои параметры подключения (пароль и т.д.):**
+  ```javascript
+  const { Pool } = require('pg');
 
-4. Запустите сервер:
+  const pool = new Pool({
+     user: 'postgres',
+     host: 'localhost',
+     database: 'taskdb',
+     password: 'ваш_пароль',
+     port: 5432,
+   });
+
+   module.exports = pool;
+
+4. **Запустите сервер:**
    ```bash
    node server.js
    
-5.Откройте в браузере: http://localhost:3000
+5.**Откройте в браузере: http://localhost:3000**
 
-## Примечания
+## **📁 Структура проекта**
+task-manager/
+├── views/            # шаблоны Handlebars
+│   └── home.hbs      # главная страница со списком задач и формой
+├── db.js             # подключение к PostgreSQL
+├── server.js         # точка входа, маршруты
+├── package.json      # зависимости
+└── README.md         # этот файл
+
+## **📝 Примечания**
 Чтобы остановить сервер, нажмите Ctrl + C.
 
 Поле «Название» обязательно для заполнения.
 
 Проект использует серверный рендеринг (Handlebars).
 
-## Лицензия
+## **📄 Лицензия**
 MIT
 
