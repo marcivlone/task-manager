@@ -33,7 +33,7 @@
 
 В файле db.js укажите свои параметры подключения:
 
-```javascript
+javascript
    const { Pool } = require('pg');
 
    const pool = new Pool({
