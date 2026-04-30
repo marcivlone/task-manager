@@ -23,3 +23,49 @@
    ```bash
    git clone https://github.com/marcivlone/task-manager.git
    cd task-manager
+2. **Установите зависимости**
+    ```bash
+    npm install
+3. **Настройте базу данных PostgreSQL**
+Убедитесь, что PostgreSQL установлен и запущен.
+
+Создайте базу данных с именем taskdb (можно через psql или pgAdmin).
+
+В файле db.js укажите свои параметры подключения:
+
+javascript
+const { Pool } = require('pg');
+
+const pool = new Pool({
+  user: 'postgres',
+  host: 'localhost',
+  database: 'taskdb',
+  password: 'ваш_пароль',
+  port: 5432,
+});
+
+module.exports = pool;
+4. **Запустите сервер**
+bash
+node server.js
+5. **Откройте в браузере**
+Перейдите по адресу: http://localhost:3000
+
+📁 Структура проекта
+text
+task-manager/
+├── views/            # шаблоны Handlebars
+│   └── home.hbs      # главная страница со списком задач и формой
+├── db.js             # подключение к PostgreSQL
+├── server.js         # точка входа, маршруты
+├── package.json      # зависимости
+└── README.md         # этот файл
+📝 Примечания
+Чтобы остановить сервер, нажмите Ctrl + C в терминале.
+
+При добавлении задачи обязательно заполнять поле «Название».
+
+Проект использует серверный рендеринг — страница генерируется на сервере и отправляется в браузер.
+
+📄 Лицензия
+MIT
