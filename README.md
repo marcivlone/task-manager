@@ -12,7 +12,7 @@
 
 ## 🛠️ Стек технологий
 
-- **Backend:** Node.js, Express.js
+- **Backend:** Node.js
 - **Шаблонизатор:** Handlebars (серверный рендеринг)
 - **База данных:** PostgreSQL
 - **Контроль версий:** Git, GitHub
