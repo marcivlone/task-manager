@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Мои задачи</title>
+    <style>
+        body { font-family: Arial; margin: 30px; }
+        .task { border: 1px solid #ccc; padding: 10px; margin-bottom: 10px; }
+    </style>
+</head>
+<body>
+    <h1>Список задач</h1>
+
+    {{#if tasks.length}}
+        {{#each tasks}}
+            <div class="task">
+                <strong>{{this.title}}</strong> <br>
+                <small>{{this.created_at}}</small>
+                <p>{{this.description}}</p>
+            </div>
+        {{/each}}
+    {{else}}
+        <p>Пока нет ни одной задачи. Добавьте первую!</p>
+    {{/if}}
+
+    <h2>Добавить новую задачу</h2>
+    <form action="/add-task" method="POST">
+        <input type="text" name="title" placeholder="Название задачи" required style="width: 300px;">
+        <br><br>
+        <textarea name="description" placeholder="Описание" rows="3" cols="40"></textarea>
+        <br><br>
+        <button type="submit">Добавить</button>
+    </form>
+</body>
+</html>
