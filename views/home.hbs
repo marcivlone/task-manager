@@ -5,10 +5,16 @@
     <style>
         body { font-family: Arial; margin: 30px; }
         .task { border: 1px solid #ccc; padding: 10px; margin-bottom: 10px; }
+        input, textarea { width: 300px; margin-bottom: 10px; display: block; }
+        button { padding: 5px 15px; }
+        .header { display: flex; justify-content: space-between; align-items: center; }
     </style>
 </head>
 <body>
-    <h1>Список задач</h1>
+    <div class="header">
+        <h1>Мои задачи</h1>
+        <div>Привет, {{username}}! <a href="/logout">Выйти</a></div>
+    </div>
 
     {{#if tasks.length}}
         {{#each tasks}}
@@ -19,15 +25,13 @@
             </div>
         {{/each}}
     {{else}}
-        <p>Пока нет ни одной задачи. Добавьте первую!</p>
+        <p>У вас пока нет задач. Добавьте первую!</p>
     {{/if}}
 
     <h2>Добавить новую задачу</h2>
     <form action="/add-task" method="POST">
-        <input type="text" name="title" placeholder="Название задачи" required style="width: 300px;">
-        <br><br>
-        <textarea name="description" placeholder="Описание" rows="3" cols="40"></textarea>
-        <br><br>
+        <input type="text" name="title" placeholder="Название задачи" required>
+        <textarea name="description" placeholder="Описание" rows="3"></textarea>
         <button type="submit">Добавить</button>
     </form>
 </body>
