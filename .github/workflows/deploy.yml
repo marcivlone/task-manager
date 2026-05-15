@@ -1,0 +1,46 @@
+# Имя нашего процесса
+name: Deploy to VPS
+
+# Запускаем этот процесс при пуше в ветку main
+on:
+  push:
+    branches: [ master ]
+
+# Описываем, что именно будет делать процесс
+jobs:
+  deploy:
+    # Запускаем на стандартном образе Ubuntu
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. Берём последнюю версию кода из репозитория
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # 2. Устанавливаем Node.js нужной версии
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # 3. Устанавливаем зависимости проекта
+      - name: Install dependencies
+        run: npm ci
+
+      # 4. Настраиваем SSH-ключ для доступа к серверу
+      - name: Setup SSH Key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.SERVER_IP }} >> ~/.ssh/known_hosts
+
+      # 5. Переносим код на сервер и перезапускаем приложение
+      - name: Deploy to Server
+        run: |
+          ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }} "
+            cd /var/www/task-manager && \
+            git pull origin main && \
+            npm install && \
+            pm2 restart task-manager
+          "
