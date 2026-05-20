@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Редактирование задачи</title>
+    <style>
+        body { font-family: Arial; margin: 40px; }
+        .form { max-width: 400px; margin: auto; }
+        input, textarea, select { width: 100%; padding: 8px; margin: 8px 0; display: block; }
+        button { padding: 10px; background: #007bff; color: white; border: none; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <div class="form">
+        <h1>Редактирование задачи</h1>
+        <form method="POST" action="/edit-task/{{task.id}}">
+            <input type="text" name="title" value="{{task.title}}" required>
+            <textarea name="description" rows="3">{{task.description}}</textarea>
+            
+            <select name="status_id">
+                <option value="">Без статуса</option>
+                {{#each statuses}}
+                    <option value="{{this.id}}" {{#if (eq ../task.status_id this.id)}}selected{{/if}}>{{this.name}}</option>
+                {{/each}}
+            </select>
+            
+            <select name="assigned_to">
+                <option value="">Не назначен</option>
+                {{#each users}}
+                    <option value="{{this.id}}" {{#if (eq ../task.assigned_to this.id)}}selected{{/if}}>{{this.username}}</option>
+                {{/each}}
+            </select>
+            
+            <button type="submit">Сохранить</button>
+        </form>
+        <p><a href="/">← Назад к списку</a></p>
+    </div>
+</body>
+</html>

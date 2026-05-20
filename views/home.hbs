@@ -5,9 +5,15 @@
     <style>
         body { font-family: Arial; margin: 30px; }
         .task { border: 1px solid #ccc; padding: 10px; margin-bottom: 10px; }
-        input, textarea { width: 300px; margin-bottom: 10px; display: block; }
+        input, textarea, select { width: 300px; margin-bottom: 10px; display: block; }
         button { padding: 5px 15px; }
         .header { display: flex; justify-content: space-between; align-items: center; }
+        table { border-collapse: collapse; width: 100%; margin-top: 20px; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+        form.inline { display: inline; }
+        .filter-sort { margin-bottom: 20px; }
+        .filter-sort select, .filter-sort button { display: inline-block; width: auto; margin-right: 10px; }
     </style>
 </head>
 <body>
@@ -16,22 +22,71 @@
         <div>Привет, {{username}}! <a href="/logout">Выйти</a></div>
     </div>
 
-    {{#if tasks.length}}
-        {{#each tasks}}
-            <div class="task">
-                <strong>{{this.title}}</strong> <br>
-                <small>{{this.created_at}}</small>
-                <p>{{this.description}}</p>
-            </div>
-        {{/each}}
-    {{else}}
-        <p>У вас пока нет задач. Добавьте первую!</p>
-    {{/if}}
+    <!-- Фильтры и сортировка -->
+    <div class="filter-sort">
+        <form method="GET" action="/" style="display: flex; align-items: center;">
+            <select name="status">
+                <option value="">Все статусы</option>
+                {{#each statuses}}
+                    <option value="{{this.id}}" {{#if (eq ../currentStatus this.id)}}selected{{/if}}>{{this.name}}</option>
+                {{/each}}
+            </select>
+            <select name="assigned">
+                <option value="">Все ответственные</option>
+                {{#each users}}
+                    <option value="{{this.id}}" {{#if (eq ../currentAssigned this.id)}}selected{{/if}}>{{this.username}}</option>
+                {{/each}}
+            </select>
+            <select name="sort">
+                <option value="">Без сортировки</option>
+                <option value="title" {{#if (eq currentSort "title")}}selected{{/if}}>По названию</option>
+                <option value="status" {{#if (eq currentSort "status")}}selected{{/if}}>По статусу</option>
+                <option value="assigned" {{#if (eq currentSort "assigned")}}selected{{/if}}>По ответственному</option>
+            </select>
+            <button type="submit">Применить</button>
+        </form>
+    </div>
 
-    <h2>Добавить новую задачу</h2>
+    <!-- Таблица задач -->
+    <table>
+        <thead>
+            <tr><th>Название</th><th>Описание</th><th>Статус</th><th>Ответственный</th><th>Дата</th><th>Действия</th></tr>
+        </thead>
+        <tbody>
+        {{#each tasks}}
+            <tr>
+                <td>{{this.title}}</td>
+                <td>{{this.description}}</td>
+                <td>{{this.status_name}}</td>
+                <td>{{this.assigned_name}}</td>
+                <td>{{this.created_at}}</td>
+                <td><a href="/edit-task/{{this.id}}">✏️ Редактировать</a></td>
+            </tr>
+        {{else}}
+            <tr><td colspan="6">Нет задач</td></tr>
+        {{/each}}
+        </tbody>
+    </table>
+
+    <h2>Новая задача</h2>
     <form action="/add-task" method="POST">
         <input type="text" name="title" placeholder="Название задачи" required>
         <textarea name="description" placeholder="Описание" rows="3"></textarea>
+        
+        <select name="status_id">
+            <option value="">Без статуса</option>
+            {{#each statuses}}
+                <option value="{{this.id}}">{{this.name}}</option>
+            {{/each}}
+        </select>
+        
+        <select name="assigned_to">
+            <option value="">Не назначен</option>
+            {{#each users}}
+                <option value="{{this.id}}">{{this.username}}</option>
+            {{/each}}
+        </select>
+        
         <button type="submit">Добавить</button>
     </form>
 </body>
