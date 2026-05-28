@@ -25,7 +25,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.use(express.static('public'));
 
-// Сессии (таблица создастся автоматически, если указать createTableIfMissing)
+// Сессии
 const PgSession = require('connect-pg-simple')(session);
 app.use(session({
     store: new PgSession({
@@ -36,7 +36,7 @@ app.use(session({
     secret: process.env.SESSION_SECRET || 'mysecretkey',
     resave: false,
     saveUninitialized: false,
-    cookie: { maxAge: 30 * 24 * 60 * 60 * 1000 } // 30 дней
+    cookie: { maxAge: 30 * 24 * 60 * 60 * 1000 }
 }));
 
 // Middleware проверки авторизации
@@ -95,10 +95,9 @@ app.get('/logout', (req, res) => {
 
 // ---------------------- Основные маршруты (требуют авторизации) ----------------------
 
-// Главная страница – список задач с фильтрацией, сортировкой, формами
+// Главная страница – список задач с фильтрацией, сортировкой
 app.get('/', requireAuth, async (req, res) => {
     try {
-        // Получаем параметры из строки запроса
         let { status, assigned, sort } = req.query;
         let sql = `
             SELECT t.*, u.username as assigned_name, s.name as status_name 
@@ -121,7 +120,6 @@ app.get('/', requireAuth, async (req, res) => {
             idx++;
         }
 
-        // Сортировка
         switch(sort) {
             case 'title':
                 sql += ' ORDER BY t.title';
@@ -155,7 +153,7 @@ app.get('/', requireAuth, async (req, res) => {
     }
 });
 
-// Добавление задачи
+// Старый способ добавления (синхронный) – оставим для совместимости
 app.post('/add-task', requireAuth, async (req, res) => {
     const { title, description, status_id, assigned_to } = req.body;
     if (!title) {
@@ -171,6 +169,52 @@ app.post('/add-task', requireAuth, async (req, res) => {
     } catch (err) {
         console.error(err);
         res.status(500).send('Ошибка при добавлении задачи');
+    }
+});
+
+// API: создание задачи (AJAX)
+app.post('/api/create_task', requireAuth, async (req, res) => {
+    const { title, description, status_id, assigned_to } = req.body;
+    if (!title) {
+        return res.status(400).json({ error: 'Название задачи обязательно' });
+    }
+    try {
+        const result = await db.query(
+            `INSERT INTO tasks (title, description, created_at, user_id, status_id, assigned_to)
+             VALUES ($1, $2, CURRENT_DATE, $3, $4, $5)
+             RETURNING id, title, description, created_at, status_id, assigned_to`,
+            [title, description, req.session.userId, status_id || null, assigned_to || null]
+        );
+        const newTask = result.rows[0];
+
+        // Получаем имена статуса и ответственного
+        let statusName = null;
+        if (status_id) {
+            const statusRes = await db.query('SELECT name FROM statuses WHERE id = $1', [status_id]);
+            if (statusRes.rows[0]) statusName = statusRes.rows[0].name;
+        }
+        let assignedName = null;
+        if (assigned_to) {
+            const userRes = await db.query('SELECT username FROM users WHERE id = $1', [assigned_to]);
+            if (userRes.rows[0]) assignedName = userRes.rows[0].username;
+        }
+
+        res.json({
+            success: true,
+            task: {
+                id: newTask.id,
+                title: newTask.title,
+                description: newTask.description,
+                created_at: newTask.created_at,
+                status_id: newTask.status_id,
+                status_name: statusName,
+                assigned_to: newTask.assigned_to,
+                assigned_name: assignedName
+            }
+        });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'Ошибка при добавлении задачи' });
     }
 });
 

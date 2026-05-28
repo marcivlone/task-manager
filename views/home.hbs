@@ -14,6 +14,7 @@
         form.inline { display: inline; }
         .filter-sort { margin-bottom: 20px; }
         .filter-sort select, .filter-sort button { display: inline-block; width: auto; margin-right: 10px; }
+        #formMessage { margin-top: 10px; }
     </style>
 </head>
 <body>
@@ -69,18 +70,18 @@
     </table>
 
     <h2>Новая задача</h2>
-    <form action="/add-task" method="POST">
-        <input type="text" name="title" placeholder="Название задачи" required>
-        <textarea name="description" placeholder="Описание" rows="3"></textarea>
+    <form id="taskForm">
+        <input type="text" name="title" id="title" placeholder="Название задачи" required>
+        <textarea name="description" id="description" placeholder="Описание" rows="3"></textarea>
         
-        <select name="status_id">
+        <select name="status_id" id="status_id">
             <option value="">Без статуса</option>
             {{#each statuses}}
                 <option value="{{this.id}}">{{this.name}}</option>
             {{/each}}
         </select>
         
-        <select name="assigned_to">
+        <select name="assigned_to" id="assigned_to">
             <option value="">Не назначен</option>
             {{#each users}}
                 <option value="{{this.id}}">{{this.username}}</option>
@@ -89,5 +90,58 @@
         
         <button type="submit">Добавить</button>
     </form>
+    <div id="formMessage"></div>
+
+    <script>
+        document.getElementById('taskForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+
+            const title = document.getElementById('title').value;
+            const description = document.getElementById('description').value;
+            const status_id = document.getElementById('status_id').value;
+            const assigned_to = document.getElementById('assigned_to').value;
+
+            const formData = { title, description, status_id, assigned_to };
+
+            try {
+                const response = await fetch('/api/create_task', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(formData)
+                });
+                const data = await response.json();
+
+                if (response.ok && data.success) {
+                    const tableBody = document.querySelector('table tbody');
+                    const newRow = tableBody.insertRow();
+                    newRow.innerHTML = `
+                        <td>${escapeHtml(data.task.title)}</td>
+                        <td>${escapeHtml(data.task.description || '')}</td>
+                        <td>${escapeHtml(data.task.status_name || '')}</td>
+                        <td>${escapeHtml(data.task.assigned_name || '')}</td>
+                        <td>${data.task.created_at}</td>
+                        <td><a href="/edit-task/${data.task.id}">✏️ Редактировать</a></td>
+                    `;
+                    document.getElementById('taskForm').reset();
+                    document.getElementById('formMessage').innerHTML = '<span style="color:green">Задача добавлена!</span>';
+                    setTimeout(() => document.getElementById('formMessage').innerHTML = '', 3000);
+                } else {
+                    document.getElementById('formMessage').innerHTML = `<span style="color:red">Ошибка: ${data.error || 'Неизвестная ошибка'}</span>`;
+                }
+            } catch (err) {
+                document.getElementById('formMessage').innerHTML = '<span style="color:red">Ошибка соединения</span>';
+            }
+        });
+
+        function escapeHtml(str) {
+            if (!str) return '';
+            return str.replace(/[&<>]/g, function(m) {
+                if (m === '&') return '&amp;';
+                if (m === '<') return '&lt;';
+                if (m === '>') return '&gt;';
+                return m;
+            });
+        }
+    </script>
 </body>
 </html>
