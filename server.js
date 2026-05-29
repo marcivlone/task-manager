@@ -39,7 +39,6 @@ app.use(session({
     cookie: { maxAge: 30 * 24 * 60 * 60 * 1000 }
 }));
 
-// Middleware проверки авторизации
 function requireAuth(req, res, next) {
     if (req.session.userId) {
         next();
@@ -93,9 +92,7 @@ app.get('/logout', (req, res) => {
     });
 });
 
-// ---------------------- Основные маршруты (требуют авторизации) ----------------------
-
-// Главная страница – список задач с фильтрацией, сортировкой
+// ---------------------- Основные маршруты ----------------------
 app.get('/', requireAuth, async (req, res) => {
     try {
         let { status, assigned, sort } = req.query;
@@ -108,7 +105,6 @@ app.get('/', requireAuth, async (req, res) => {
         `;
         let params = [req.session.userId];
         let idx = 2;
-
         if (status && status !== '') {
             sql += ` AND t.status_id = $${idx}`;
             params.push(status);
@@ -119,25 +115,15 @@ app.get('/', requireAuth, async (req, res) => {
             params.push(assigned);
             idx++;
         }
-
         switch(sort) {
-            case 'title':
-                sql += ' ORDER BY t.title';
-                break;
-            case 'status':
-                sql += ' ORDER BY s.name';
-                break;
-            case 'assigned':
-                sql += ' ORDER BY u.username';
-                break;
-            default:
-                sql += ' ORDER BY t.created_at DESC';
+            case 'title': sql += ' ORDER BY t.title'; break;
+            case 'status': sql += ' ORDER BY s.name'; break;
+            case 'assigned': sql += ' ORDER BY u.username'; break;
+            default: sql += ' ORDER BY t.created_at DESC';
         }
-
         const tasksRes = await db.query(sql, params);
         const usersRes = await db.query('SELECT id, username FROM users ORDER BY username');
         const statusesRes = await db.query('SELECT id, name FROM statuses ORDER BY "order"');
-
         res.render('home', { 
             tasks: tasksRes.rows,
             users: usersRes.rows,
@@ -153,31 +139,10 @@ app.get('/', requireAuth, async (req, res) => {
     }
 });
 
-// Старый способ добавления (синхронный) – оставим для совместимости
-app.post('/add-task', requireAuth, async (req, res) => {
-    const { title, description, status_id, assigned_to } = req.body;
-    if (!title) {
-        return res.status(400).send('Название задачи обязательно');
-    }
-    try {
-        await db.query(
-            `INSERT INTO tasks (title, description, created_at, user_id, status_id, assigned_to)
-             VALUES ($1, $2, CURRENT_DATE, $3, $4, $5)`,
-            [title, description, req.session.userId, status_id || null, assigned_to || null]
-        );
-        res.redirect('/');
-    } catch (err) {
-        console.error(err);
-        res.status(500).send('Ошибка при добавлении задачи');
-    }
-});
-
-// API: создание задачи (AJAX)
+// API создание задачи (AJAX)
 app.post('/api/create_task', requireAuth, async (req, res) => {
     const { title, description, status_id, assigned_to } = req.body;
-    if (!title) {
-        return res.status(400).json({ error: 'Название задачи обязательно' });
-    }
+    if (!title) return res.status(400).json({ error: 'Название задачи обязательно' });
     try {
         const result = await db.query(
             `INSERT INTO tasks (title, description, created_at, user_id, status_id, assigned_to)
@@ -186,19 +151,15 @@ app.post('/api/create_task', requireAuth, async (req, res) => {
             [title, description, req.session.userId, status_id || null, assigned_to || null]
         );
         const newTask = result.rows[0];
-
-        // Получаем имена статуса и ответственного
-        let statusName = null;
+        let statusName = null, assignedName = null;
         if (status_id) {
-            const statusRes = await db.query('SELECT name FROM statuses WHERE id = $1', [status_id]);
-            if (statusRes.rows[0]) statusName = statusRes.rows[0].name;
+            const sRes = await db.query('SELECT name FROM statuses WHERE id = $1', [status_id]);
+            if (sRes.rows[0]) statusName = sRes.rows[0].name;
         }
-        let assignedName = null;
         if (assigned_to) {
-            const userRes = await db.query('SELECT username FROM users WHERE id = $1', [assigned_to]);
-            if (userRes.rows[0]) assignedName = userRes.rows[0].username;
+            const uRes = await db.query('SELECT username FROM users WHERE id = $1', [assigned_to]);
+            if (uRes.rows[0]) assignedName = uRes.rows[0].username;
         }
-
         res.json({
             success: true,
             task: {
@@ -218,7 +179,7 @@ app.post('/api/create_task', requireAuth, async (req, res) => {
     }
 });
 
-// Форма редактирования задачи
+// Страница редактирования задачи (с чатом)
 app.get('/edit-task/:id', requireAuth, async (req, res) => {
     const taskId = req.params.id;
     try {
@@ -231,10 +192,24 @@ app.get('/edit-task/:id', requireAuth, async (req, res) => {
         }
         const usersRes = await db.query('SELECT id, username FROM users ORDER BY username');
         const statusesRes = await db.query('SELECT id, name FROM statuses ORDER BY "order"');
+        
+        // Получаем комментарии к задаче
+        const commentsRes = await db.query(
+            `SELECT c.*, u.username 
+             FROM task_comments c
+             JOIN users u ON c.user_id = u.id
+             WHERE c.task_id = $1
+             ORDER BY c.created_at ASC`,
+            [taskId]
+        );
+
         res.render('edit', { 
             task: taskRes.rows[0], 
             users: usersRes.rows, 
-            statuses: statusesRes.rows 
+            statuses: statusesRes.rows,
+            comments: commentsRes.rows,
+            username: req.session.username,
+            userId: req.session.userId
         });
     } catch (err) {
         console.error(err);
@@ -246,9 +221,7 @@ app.get('/edit-task/:id', requireAuth, async (req, res) => {
 app.post('/edit-task/:id', requireAuth, async (req, res) => {
     const { title, description, status_id, assigned_to } = req.body;
     const taskId = req.params.id;
-    if (!title) {
-        return res.status(400).send('Название задачи обязательно');
-    }
+    if (!title) return res.status(400).send('Название задачи обязательно');
     try {
         await db.query(
             `UPDATE tasks 
@@ -263,7 +236,74 @@ app.post('/edit-task/:id', requireAuth, async (req, res) => {
     }
 });
 
+// ---------------------- WebSocket (socket.io) ----------------------
+const server = require('http').createServer(app);
+const io = require('socket.io')(server);
+
+io.use((socket, next) => {
+    // Передаём сессию Express в socket.io
+    const sessionMiddleware = session({
+        store: new PgSession({ pool: db, tableName: 'session', createTableIfMissing: true }),
+        secret: process.env.SESSION_SECRET || 'mysecretkey',
+        resave: false,
+        saveUninitialized: false
+    });
+    sessionMiddleware(socket.request, {}, next);
+});
+
+io.on('connection', (socket) => {
+    console.log('Новый клиент подключён');
+
+    // Получаем userId из сессии
+    const session = socket.request.session;
+    const userId = session.userId;
+    const username = session.username;
+
+    if (!userId) {
+        socket.disconnect();
+        return;
+    }
+
+    // Подключение к комнате задачи
+    socket.on('join_task', (taskId) => {
+        socket.join(`task_${taskId}`);
+        socket.taskId = taskId;
+        console.log(`Пользователь ${username} присоединился к комнате task_${taskId}`);
+    });
+
+    // Обработка отправки сообщения
+    socket.on('send_comment', async (data) => {
+        const { taskId, message } = data;
+        if (!message.trim()) return;
+        try {
+            const result = await db.query(
+                `INSERT INTO task_comments (task_id, user_id, message)
+                 VALUES ($1, $2, $3)
+                 RETURNING id, created_at`,
+                [taskId, userId, message.trim()]
+            );
+            const newComment = {
+                id: result.rows[0].id,
+                task_id: taskId,
+                user_id: userId,
+                username: username,
+                message: message.trim(),
+                created_at: result.rows[0].created_at
+            };
+            // Рассылаем всем в комнату задачи
+            io.to(`task_${taskId}`).emit('new_comment', newComment);
+        } catch (err) {
+            console.error(err);
+            socket.emit('comment_error', 'Не удалось сохранить комментарий');
+        }
+    });
+
+    socket.on('disconnect', () => {
+        console.log(`Пользователь ${username} отключился`);
+    });
+});
+
 // Запуск сервера
-app.listen(PORT, () => {
+server.listen(PORT, () => {
     console.log(`Сервер запущен на http://localhost:${PORT}`);
 });
