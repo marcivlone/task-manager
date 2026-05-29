@@ -183,17 +183,12 @@ app.post('/api/create_task', requireAuth, async (req, res) => {
 app.get('/edit-task/:id', requireAuth, async (req, res) => {
     const taskId = req.params.id;
     try {
-        const taskRes = await db.query(
-            'SELECT * FROM tasks WHERE id = $1 AND user_id = $2',
-            [taskId, req.session.userId]
-        );
+        const taskRes = await db.query('SELECT * FROM tasks WHERE id = $1', [taskId]);
         if (taskRes.rows.length === 0) {
             return res.status(404).send('Задача не найдена');
         }
         const usersRes = await db.query('SELECT id, username FROM users ORDER BY username');
         const statusesRes = await db.query('SELECT id, name FROM statuses ORDER BY "order"');
-        
-        // Получаем комментарии к задаче
         const commentsRes = await db.query(
             `SELECT c.*, u.username 
              FROM task_comments c
@@ -202,7 +197,6 @@ app.get('/edit-task/:id', requireAuth, async (req, res) => {
              ORDER BY c.created_at ASC`,
             [taskId]
         );
-
         res.render('edit', { 
             task: taskRes.rows[0], 
             users: usersRes.rows, 
@@ -226,8 +220,8 @@ app.post('/edit-task/:id', requireAuth, async (req, res) => {
         await db.query(
             `UPDATE tasks 
              SET title = $1, description = $2, status_id = $3, assigned_to = $4
-             WHERE id = $5 AND user_id = $6`,
-            [title, description, status_id || null, assigned_to || null, taskId, req.session.userId]
+             WHERE id = $5`,
+            [title, description, status_id || null, assigned_to || null, taskId]
         );
         res.redirect('/');
     } catch (err) {
