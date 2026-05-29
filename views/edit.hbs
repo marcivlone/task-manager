@@ -4,9 +4,17 @@
     <title>Редактирование задачи</title>
     <style>
         body { font-family: Arial; margin: 40px; }
-        .form { max-width: 400px; margin: auto; }
+        .form { max-width: 400px; margin: bottom 20px; }
         input, textarea, select { width: 100%; padding: 8px; margin: 8px 0; display: block; }
         button { padding: 10px; background: #007bff; color: white; border: none; cursor: pointer; }
+        .chat { max-width: 600px; margin-top: 30px; border-top: 1px solid #ccc; padding-top: 20px; }
+        .messages { height: 300px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; margin-bottom: 10px; background: #f9f9f9; }
+        .message { margin-bottom: 10px; }
+        .message strong { color: #007bff; }
+        .message small { color: #888; font-size: 0.8em; }
+        .message .text { margin-top: 4px; }
+        #chatForm { display: flex; gap: 10px; }
+        #chatMessage { flex: 1; padding: 8px; }
     </style>
 </head>
 <body>
@@ -30,9 +38,80 @@
                 {{/each}}
             </select>
             
-            <button type="submit">Сохранить</button>
+            <button type="submit">Сохранить изменения</button>
         </form>
         <p><a href="/">← Назад к списку</a></p>
     </div>
+
+    <div class="chat">
+        <h2>Комментарии (чат)</h2>
+        <div id="messagesList" class="messages">
+            {{#each comments}}
+                <div class="message" data-id="{{this.id}}">
+                    <strong>{{this.username}}</strong> <small>{{this.created_at}}</small>
+                    <div class="text">{{this.message}}</div>
+                </div>
+            {{/each}}
+        </div>
+        <form id="chatForm">
+            <input type="text" id="chatMessage" placeholder="Ваше сообщение..." required>
+            <button type="submit">Отправить</button>
+        </form>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+        const taskId = {{task.id}};
+        const currentUserId = {{userId}};
+
+        // Подключаемся к комнате задачи
+        socket.emit('join_task', taskId);
+
+        // Получаем новые сообщения
+        socket.on('new_comment', (comment) => {
+            if (comment.task_id !== taskId) return;
+            addMessageToDOM(comment);
+        });
+
+        // Отправка сообщения
+        document.getElementById('chatForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const input = document.getElementById('chatMessage');
+            const message = input.value.trim();
+            if (!message) return;
+            socket.emit('send_comment', { taskId, message });
+            input.value = '';
+        });
+
+        function addMessageToDOM(comment) {
+            const container = document.getElementById('messagesList');
+            const div = document.createElement('div');
+            div.className = 'message';
+            div.setAttribute('data-id', comment.id);
+            div.innerHTML = `
+                <strong>${escapeHtml(comment.username)}</strong> <small>${comment.created_at}</small>
+                <div class="text">${escapeHtml(comment.message)}</div>
+            `;
+            container.appendChild(div);
+            container.scrollTop = container.scrollHeight;
+        }
+
+        function escapeHtml(str) {
+            if (!str) return '';
+            return str.replace(/[&<>]/g, function(m) {
+                if (m === '&') return '&amp;';
+                if (m === '<') return '&lt;';
+                if (m === '>') return '&gt;';
+                return m;
+            });
+        }
+
+        // Прокрутка вниз при загрузке страницы
+        window.addEventListener('load', () => {
+            const container = document.getElementById('messagesList');
+            container.scrollTop = container.scrollHeight;
+        });
+    </script>
 </body>
 </html>
