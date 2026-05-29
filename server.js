@@ -101,10 +101,10 @@ app.get('/', requireAuth, async (req, res) => {
             FROM tasks t
             LEFT JOIN users u ON t.assigned_to = u.id
             LEFT JOIN statuses s ON t.status_id = s.id
-            WHERE t.user_id = $1
+            WHERE 1=1
         `;
-        let params = [req.session.userId];
-        let idx = 2;
+        let params = [];
+        let idx = 1;
         if (status && status !== '') {
             sql += ` AND t.status_id = $${idx}`;
             params.push(status);
