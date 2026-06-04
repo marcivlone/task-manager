@@ -5,17 +5,18 @@ const exphbs = require('express-handlebars');
 const path = require('path');
 const db = require('./db');
 const auth = require('./auth');
+const jwt = require('jsonwebtoken');
+const cors = require('cors');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const JWT_SECRET = process.env.JWT_SECRET || 'mysecretkey';
 
-// Настройка Handlebars
+// Настройка Handlebars (для старых страниц)
 app.engine('hbs', exphbs.engine({ 
     extname: 'hbs', 
     defaultLayout: false,
-    helpers: {
-        eq: (a, b) => a == b
-    }
+    helpers: { eq: (a, b) => a == b }
 }));
 app.set('view engine', 'hbs');
 app.set('views', path.join(__dirname, 'views'));
@@ -25,74 +26,62 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.use(express.static('public'));
 
-// Сессии
+// CORS для React (разрешаем запросы с localhost:5173)
+app.use(cors({
+    origin: 'http://localhost:5173',
+    credentials: true
+}));
+
+// Сессии (для старых Handlebars-страниц)
 const PgSession = require('connect-pg-simple')(session);
 app.use(session({
-    store: new PgSession({
-        pool: db,
-        tableName: 'session',
-        createTableIfMissing: true
-    }),
+    store: new PgSession({ pool: db, tableName: 'session', createTableIfMissing: true }),
     secret: process.env.SESSION_SECRET || 'mysecretkey',
     resave: false,
     saveUninitialized: false,
-    cookie: { maxAge: 30 * 24 * 60 * 60 * 1000 }
+    cookie: {
+        secure: false,       // для localhost
+        httpOnly: true,
+        sameSite: 'lax',
+        maxAge: 30 * 24 * 60 * 60 * 1000
+    }
 }));
 
+// Middleware для Handlebars-авторизации
 function requireAuth(req, res, next) {
-    if (req.session.userId) {
-        next();
-    } else {
-        res.redirect('/login');
-    }
+    if (req.session.userId) next();
+    else res.redirect('/login');
 }
 
-// ---------------------- Маршруты авторизации ----------------------
-app.get('/login', (req, res) => {
-    res.render('login', { title: 'Вход' });
-});
-
+// ---------------------- Handlebars маршруты (старые, для совместимости) ----------------------
+app.get('/login', (req, res) => { res.render('login'); });
 app.post('/login', async (req, res) => {
     const { email, password } = req.body;
     const user = await auth.authenticateUser(email, password);
-    if (!user) {
-        return res.render('login', { error: 'Неверный email или пароль' });
-    }
+    if (!user) return res.render('login', { error: 'Неверный email или пароль' });
     req.session.userId = user.id;
     req.session.username = user.username;
     res.redirect('/');
 });
-
-app.get('/register', (req, res) => {
-    res.render('register', { title: 'Регистрация' });
-});
-
+app.get('/register', (req, res) => { res.render('register'); });
 app.post('/register', async (req, res) => {
     const { username, email, password, confirm } = req.body;
-    if (password !== confirm) {
-        return res.render('register', { error: 'Пароли не совпадают' });
-    }
-    if (password.length < 6) {
-        return res.render('register', { error: 'Пароль должен быть не менее 6 символов' });
-    }
+    if (password !== confirm) return res.render('register', { error: 'Пароли не совпадают' });
+    if (password.length < 6) return res.render('register', { error: 'Пароль минимум 6 символов' });
     try {
         const newUser = await auth.registerUser(username, email, password);
         req.session.userId = newUser.id;
         req.session.username = newUser.username;
         res.redirect('/');
     } catch (err) {
-        console.error(err);
-        res.render('register', { error: 'Пользователь с таким email или именем уже существует' });
+        res.render('register', { error: 'Пользователь уже существует' });
     }
 });
-
 app.get('/logout', (req, res) => {
-    req.session.destroy(() => {
-        res.redirect('/login');
-    });
+    req.session.destroy(() => res.redirect('/login'));
 });
 
-// ---------------------- Основные маршруты ----------------------
+// Главная страница Handlebars (список задач)
 app.get('/', requireAuth, async (req, res) => {
     try {
         let { status, assigned, sort } = req.query;
@@ -103,139 +92,193 @@ app.get('/', requireAuth, async (req, res) => {
             LEFT JOIN statuses s ON t.status_id = s.id
             WHERE 1=1
         `;
-        let params = [];
-        let idx = 1;
-        if (status && status !== '') {
-            sql += ` AND t.status_id = $${idx}`;
-            params.push(status);
-            idx++;
-        }
-        if (assigned && assigned !== '') {
-            sql += ` AND t.assigned_to = $${idx}`;
-            params.push(assigned);
-            idx++;
-        }
+        let params = [], idx = 1;
+        if (status && status !== '') { sql += ` AND t.status_id = $${idx}`; params.push(status); idx++; }
+        if (assigned && assigned !== '') { sql += ` AND t.assigned_to = $${idx}`; params.push(assigned); idx++; }
         switch(sort) {
             case 'title': sql += ' ORDER BY t.title'; break;
             case 'status': sql += ' ORDER BY s.name'; break;
             case 'assigned': sql += ' ORDER BY u.username'; break;
             default: sql += ' ORDER BY t.created_at DESC';
         }
-        const tasksRes = await db.query(sql, params);
-        const usersRes = await db.query('SELECT id, username FROM users ORDER BY username');
-        const statusesRes = await db.query('SELECT id, name FROM statuses ORDER BY "order"');
-        res.render('home', { 
-            tasks: tasksRes.rows,
-            users: usersRes.rows,
-            statuses: statusesRes.rows,
-            currentStatus: status || '',
-            currentAssigned: assigned || '',
-            currentSort: sort || '',
-            username: req.session.username
-        });
-    } catch (err) {
-        console.error(err);
-        res.status(500).send('Ошибка сервера');
-    }
+        const tasks = (await db.query(sql, params)).rows;
+        const users = (await db.query('SELECT id, username FROM users ORDER BY username')).rows;
+        const statuses = (await db.query('SELECT id, name FROM statuses ORDER BY "order"')).rows;
+        res.render('home', { tasks, users, statuses, currentStatus: status || '', currentAssigned: assigned || '', currentSort: sort || '', username: req.session.username });
+    } catch(err) { res.status(500).send('Ошибка сервера'); }
 });
 
-// API создание задачи (AJAX)
-app.post('/api/create_task', requireAuth, async (req, res) => {
+app.post('/add-task', requireAuth, async (req, res) => {
     const { title, description, status_id, assigned_to } = req.body;
-    if (!title) return res.status(400).json({ error: 'Название задачи обязательно' });
-    try {
-        const result = await db.query(
-            `INSERT INTO tasks (title, description, created_at, user_id, status_id, assigned_to)
-             VALUES ($1, $2, CURRENT_DATE, $3, $4, $5)
-             RETURNING id, title, description, created_at, status_id, assigned_to`,
-            [title, description, req.session.userId, status_id || null, assigned_to || null]
-        );
-        const newTask = result.rows[0];
-        let statusName = null, assignedName = null;
-        if (status_id) {
-            const sRes = await db.query('SELECT name FROM statuses WHERE id = $1', [status_id]);
-            if (sRes.rows[0]) statusName = sRes.rows[0].name;
-        }
-        if (assigned_to) {
-            const uRes = await db.query('SELECT username FROM users WHERE id = $1', [assigned_to]);
-            if (uRes.rows[0]) assignedName = uRes.rows[0].username;
-        }
-        res.json({
-            success: true,
-            task: {
-                id: newTask.id,
-                title: newTask.title,
-                description: newTask.description,
-                created_at: newTask.created_at,
-                status_id: newTask.status_id,
-                status_name: statusName,
-                assigned_to: newTask.assigned_to,
-                assigned_name: assignedName
-            }
-        });
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: 'Ошибка при добавлении задачи' });
-    }
+    if (!title) return res.status(400).send('Название обязательно');
+    await db.query(`INSERT INTO tasks (title, description, created_at, user_id, status_id, assigned_to) VALUES ($1,$2,CURRENT_DATE,$3,$4,$5)`,
+        [title, description, req.session.userId, status_id || null, assigned_to || null]);
+    res.redirect('/');
 });
 
-// Страница редактирования задачи (с чатом)
 app.get('/edit-task/:id', requireAuth, async (req, res) => {
-    const taskId = req.params.id;
-    try {
-        const taskRes = await db.query('SELECT * FROM tasks WHERE id = $1', [taskId]);
-        if (taskRes.rows.length === 0) {
-            return res.status(404).send('Задача не найдена');
-        }
-        const usersRes = await db.query('SELECT id, username FROM users ORDER BY username');
-        const statusesRes = await db.query('SELECT id, name FROM statuses ORDER BY "order"');
-        const commentsRes = await db.query(
-            `SELECT c.*, u.username 
-             FROM task_comments c
-             JOIN users u ON c.user_id = u.id
-             WHERE c.task_id = $1
-             ORDER BY c.created_at ASC`,
-            [taskId]
-        );
-        res.render('edit', { 
-            task: taskRes.rows[0], 
-            users: usersRes.rows, 
-            statuses: statusesRes.rows,
-            comments: commentsRes.rows,
-            username: req.session.username,
-            userId: req.session.userId
-        });
-    } catch (err) {
-        console.error(err);
-        res.status(500).send('Ошибка сервера');
-    }
+    const task = (await db.query('SELECT * FROM tasks WHERE id = $1', [req.params.id])).rows[0];
+    if (!task) return res.status(404).send('Задача не найдена');
+    const users = (await db.query('SELECT id, username FROM users')).rows;
+    const statuses = (await db.query('SELECT id, name FROM statuses ORDER BY "order"')).rows;
+    const comments = (await db.query(`SELECT c.*, u.username FROM task_comments c JOIN users u ON c.user_id = u.id WHERE c.task_id = $1 ORDER BY c.created_at ASC`, [req.params.id])).rows;
+    res.render('edit', { task, users, statuses, comments, username: req.session.username, userId: req.session.userId });
 });
-
-// Обновление задачи
 app.post('/edit-task/:id', requireAuth, async (req, res) => {
     const { title, description, status_id, assigned_to } = req.body;
-    const taskId = req.params.id;
-    if (!title) return res.status(400).send('Название задачи обязательно');
+    await db.query(`UPDATE tasks SET title=$1, description=$2, status_id=$3, assigned_to=$4 WHERE id=$5`,
+        [title, description, status_id || null, assigned_to || null, req.params.id]);
+    res.redirect('/');
+});
+
+// ---------------------- API для React (JWT) ----------------------
+// Middleware проверки JWT
+function authenticateToken(req, res, next) {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+    if (!token) return res.status(401).json({ error: 'Требуется авторизация' });
+    jwt.verify(token, JWT_SECRET, (err, user) => {
+        if (err) return res.status(403).json({ error: 'Неверный токен' });
+        req.user = user;
+        next();
+    });
+}
+
+// Регистрация (API)
+app.post('/api/register', async (req, res) => {
+    const { username, email, password } = req.body;
+    if (!username || !email || !password) return res.status(400).json({ error: 'Все поля обязательны' });
     try {
-        await db.query(
-            `UPDATE tasks 
-             SET title = $1, description = $2, status_id = $3, assigned_to = $4
-             WHERE id = $5`,
-            [title, description, status_id || null, assigned_to || null, taskId]
-        );
-        res.redirect('/');
+        const newUser = await auth.registerUser(username, email, password);
+        const token = jwt.sign({ id: newUser.id, username: newUser.username, email: newUser.email }, JWT_SECRET, { expiresIn: '7d' });
+        res.json({ token, user: { id: newUser.id, username: newUser.username, email: newUser.email } });
     } catch (err) {
-        console.error(err);
-        res.status(500).send('Ошибка при обновлении задачи');
+        res.status(400).json({ error: 'Пользователь уже существует' });
     }
+});
+
+// Логин (API)
+app.post('/api/login', async (req, res) => {
+    const { email, password } = req.body;
+    const user = await auth.authenticateUser(email, password);
+    if (!user) return res.status(401).json({ error: 'Неверные учётные данные' });
+    const token = jwt.sign({ id: user.id, username: user.username, email: user.email }, JWT_SECRET, { expiresIn: '7d' });
+    res.json({ token, user: { id: user.id, username: user.username, email: user.email } });
+});
+
+// Получить все задачи (с фильтрацией и сортировкой)
+app.get('/api/tasks', authenticateToken, async (req, res) => {
+    try {
+        let { status, assigned, sort } = req.query;
+        let sql = `SELECT t.*, u.username as assigned_name, s.name as status_name FROM tasks t LEFT JOIN users u ON t.assigned_to = u.id LEFT JOIN statuses s ON t.status_id = s.id WHERE 1=1`;
+        let params = [], idx = 1;
+        if (status && status !== '') { sql += ` AND t.status_id = $${idx}`; params.push(status); idx++; }
+        if (assigned && assigned !== '') { sql += ` AND t.assigned_to = $${idx}`; params.push(assigned); idx++; }
+        switch(sort) {
+            case 'title': sql += ' ORDER BY t.title'; break;
+            case 'status': sql += ' ORDER BY s.name'; break;
+            case 'assigned': sql += ' ORDER BY u.username'; break;
+            default: sql += ' ORDER BY t.created_at DESC';
+        }
+        const tasks = (await db.query(sql, params)).rows;
+        res.json(tasks);
+    } catch (err) { res.status(500).json({ error: 'Ошибка сервера' }); }
+});
+
+// Создать задачу
+app.post('/api/tasks', authenticateToken, async (req, res) => {
+    const { title, description, status_id, assigned_to } = req.body;
+    if (!title) return res.status(400).json({ error: 'Название обязательно' });
+    try {
+        const result = await db.query(
+            `INSERT INTO tasks (title, description, created_at, user_id, status_id, assigned_to) VALUES ($1,$2,CURRENT_DATE,$3,$4,$5) RETURNING *`,
+            [title, description, req.user.id, status_id || null, assigned_to || null]
+        );
+        res.json(result.rows[0]);
+    } catch (err) { res.status(500).json({ error: 'Ошибка при создании' }); }
+});
+
+// Обновить задачу
+app.put('/api/tasks/:id', authenticateToken, async (req, res) => {
+    const { title, description, status_id, assigned_to } = req.body;
+    if (!title) return res.status(400).json({ error: 'Название обязательно' });
+    await db.query(`UPDATE tasks SET title=$1, description=$2, status_id=$3, assigned_to=$4 WHERE id=$5`,
+        [title, description, status_id || null, assigned_to || null, req.params.id]);
+    res.json({ success: true });
+});
+
+// Удалить задачу
+app.delete('/api/tasks/:id', authenticateToken, async (req, res) => {
+    await db.query('DELETE FROM tasks WHERE id = $1', [req.params.id]);
+    res.json({ success: true });
+});
+
+// Получить всех пользователей (для списка ответственных)
+app.get('/api/users', authenticateToken, async (req, res) => {
+    const users = (await db.query('SELECT id, username FROM users ORDER BY username')).rows;
+    res.json(users);
+});
+
+// Получить все статусы
+app.get('/api/statuses', authenticateToken, async (req, res) => {
+    const statuses = (await db.query('SELECT id, name FROM statuses ORDER BY "order"')).rows;
+    res.json(statuses);
+});
+
+// Получить одну задачу по id
+app.get('/api/tasks/:id', authenticateToken, async (req, res) => {
+    const task = (await db.query(
+        `SELECT t.*, u.username as assigned_name, s.name as status_name 
+         FROM tasks t
+         LEFT JOIN users u ON t.assigned_to = u.id
+         LEFT JOIN statuses s ON t.status_id = s.id
+         WHERE t.id = $1`,
+        [req.params.id]
+    )).rows[0];
+    if (!task) return res.status(404).json({ error: 'Задача не найдена' });
+    res.json(task);
+});
+
+// Получить комментарии к задаче
+app.get('/api/tasks/:id/comments', authenticateToken, async (req, res) => {
+    const comments = (await db.query(
+        `SELECT c.*, u.username FROM task_comments c JOIN users u ON c.user_id = u.id WHERE c.task_id = $1 ORDER BY c.created_at ASC`,
+        [req.params.id]
+    )).rows;
+    res.json(comments);
+});
+
+// Добавить комментарий (через REST)
+app.post('/api/comments', authenticateToken, async (req, res) => {
+    const { task_id, message } = req.body;
+    if (!message) return res.status(400).json({ error: 'Сообщение не может быть пустым' });
+    const result = await db.query(
+        `INSERT INTO task_comments (task_id, user_id, message) VALUES ($1,$2,$3) RETURNING id, created_at`,
+        [task_id, req.user.id, message]
+    );
+    const newComment = {
+        id: result.rows[0].id,
+        task_id,
+        user_id: req.user.id,
+        username: req.user.username,
+        message,
+        created_at: result.rows[0].created_at
+    };
+    // Оповещаем через WebSocket
+    io.to(`task_${task_id}`).emit('new_comment', newComment);
+    res.json(newComment);
 });
 
 // ---------------------- WebSocket (socket.io) ----------------------
 const server = require('http').createServer(app);
-const io = require('socket.io')(server);
-
+const io = require('socket.io')(server, {
+  cors: {
+    origin: "http://localhost:5173",
+    methods: ["GET", "POST"],
+    credentials: true
+  }
+});
 io.use((socket, next) => {
-    // Передаём сессию Express в socket.io
     const sessionMiddleware = session({
         store: new PgSession({ pool: db, tableName: 'session', createTableIfMissing: true }),
         secret: process.env.SESSION_SECRET || 'mysecretkey',
@@ -244,60 +287,34 @@ io.use((socket, next) => {
     });
     sessionMiddleware(socket.request, {}, next);
 });
-
 io.on('connection', (socket) => {
-    console.log('Новый клиент подключён');
-
-    // Получаем userId из сессии
     const session = socket.request.session;
     const userId = session.userId;
     const username = session.username;
-
-    if (!userId) {
-        socket.disconnect();
-        return;
+    if (!userId) { 
+        socket.disconnect(); 
+        return; 
     }
-
-    // Подключение к комнате задачи
-    socket.on('join_task', (taskId) => {
-        socket.join(`task_${taskId}`);
-        socket.taskId = taskId;
-        console.log(`Пользователь ${username} присоединился к комнате task_${taskId}`);
-    });
-
-    // Обработка отправки сообщения
+    console.log(`Пользователь ${username} (id:${userId}) подключился`);
+    socket.on('join_task', (taskId) => { socket.join(`task_${taskId}`); });
     socket.on('send_comment', async (data) => {
         const { taskId, message } = data;
         if (!message.trim()) return;
-        try {
-            const result = await db.query(
-                `INSERT INTO task_comments (task_id, user_id, message)
-                 VALUES ($1, $2, $3)
-                 RETURNING id, created_at`,
-                [taskId, userId, message.trim()]
-            );
-            const newComment = {
-                id: result.rows[0].id,
-                task_id: taskId,
-                user_id: userId,
-                username: username,
-                message: message.trim(),
-                created_at: result.rows[0].created_at
-            };
-            // Рассылаем всем в комнату задачи
-            io.to(`task_${taskId}`).emit('new_comment', newComment);
-        } catch (err) {
-            console.error(err);
-            socket.emit('comment_error', 'Не удалось сохранить комментарий');
-        }
-    });
-
-    socket.on('disconnect', () => {
-        console.log(`Пользователь ${username} отключился`);
+        const result = await db.query(
+            `INSERT INTO task_comments (task_id, user_id, message) VALUES ($1,$2,$3) RETURNING id, created_at`,
+            [taskId, userId, message.trim()]
+        );
+        const newComment = {
+            id: result.rows[0].id,
+            task_id: taskId,
+            user_id: userId,
+            username: username,
+            message: message.trim(),
+            created_at: result.rows[0].created_at
+        };
+        io.to(`task_${taskId}`).emit('new_comment', newComment);
     });
 });
 
-// Запуск сервера
-server.listen(PORT, () => {
-    console.log(`Сервер запущен на http://localhost:${PORT}`);
-});
+// Запуск
+server.listen(PORT, () => console.log(`Сервер запущен на http://localhost:${PORT}`));

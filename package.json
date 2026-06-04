@@ -13,10 +13,12 @@
   "dependencies": {
     "bcrypt": "^6.0.0",
     "connect-pg-simple": "^10.0.0",
+    "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "express-handlebars": "^9.0.1",
     "express-session": "^1.19.0",
+    "jsonwebtoken": "^9.0.3",
     "pg": "^8.20.0",
     "socket.io": "^4.8.3"
   }
