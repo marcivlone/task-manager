@@ -39,11 +39,20 @@ export default function Tasks() {
 
     if (loading) return <div>Загрузка...</div>;
 
+    const handleLogout = () => {
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        window.location.href = '/login';
+    };
+
     return (
         <div className="container mx-auto p-4">
             <div className="flex justify-between items-center mb-4">
                 <h1 className="text-3xl font-bold">Задачи</h1>
-                <button onClick={() => setIsModalOpen(true)} className="bg-green-500 text-white px-4 py-2 rounded">+ Новая задача</button>
+                <div className="flex gap-2">
+                    <button onClick={() => setIsModalOpen(true)} className="bg-green-500 text-white px-4 py-2 rounded">+ Новая задача</button>
+                    <button onClick={handleLogout} className="bg-red-500 text-white px-4 py-2 rounded">Выйти</button>
+                </div>
             </div>
 
             <div className="flex gap-4 mb-4">

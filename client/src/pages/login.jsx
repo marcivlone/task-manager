@@ -16,7 +16,7 @@ export default function Login() {
             localStorage.setItem('token', response.data.token);
             localStorage.setItem('user', JSON.stringify(response.data.user));
             // Перенаправляем на страницу со списком задач
-            navigate('/tasks');
+            window.location.href = '/tasks';
         } catch (err) {
             setError(err.response?.data?.error || 'Ошибка входа');
         }
