@@ -1,153 +1,456 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import {
+  ArrowLeft,
+  CalendarDays,
+  MessageCircle,
+  Save,
+  Send,
+  Trash2,
+  UserRound,
+} from 'lucide-react';
 import { io } from 'socket.io-client';
 import api from '../api';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 
 const socket = io('http://localhost:3000', {
-    withCredentials: true
+  withCredentials: true,
 });
 
+const FALLBACK_STATUS_LABELS = {
+  1: 'Новая',
+  2: 'В работе',
+  3: 'Завершена',
+};
+
+const getStatusLabel = (statusId, statusName) => {
+  if (statusName && !statusName.includes('?')) {
+    return statusName;
+  }
+
+  return FALLBACK_STATUS_LABELS[Number(statusId)] || 'Без статуса';
+};
+
+const getStatusKind = (statusId, statusName) => {
+  const label = getStatusLabel(statusId, statusName).toLowerCase();
+
+  if (
+    Number(statusId) === 3 ||
+    label.includes('done') ||
+    label.includes('готов') ||
+    label.includes('выполн') ||
+    label.includes('заверш')
+  ) {
+    return 'done';
+  }
+
+  if (
+    Number(statusId) === 2 ||
+    label.includes('progress') ||
+    label.includes('работ') ||
+    label.includes('процесс')
+  ) {
+    return 'progress';
+  }
+
+  if (label.includes('block') || label.includes('ошиб') || label.includes('проблем')) {
+    return 'blocked';
+  }
+
+  return 'new';
+};
+
+const formatDate = (date) => {
+  const parsedDate = new Date(date);
+
+  if (Number.isNaN(parsedDate.getTime())) {
+    return 'Без даты';
+  }
+
+  return parsedDate.toLocaleDateString('ru-RU');
+};
+
+const formatDateTime = (date) => {
+  const parsedDate = new Date(date);
+
+  if (Number.isNaN(parsedDate.getTime())) {
+    return '';
+  }
+
+  return parsedDate.toLocaleString('ru-RU', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+};
+
+const getCurrentUser = () => {
+  try {
+    return JSON.parse(localStorage.getItem('user') || '{}');
+  } catch {
+    return {};
+  }
+};
+
 export default function TaskDetail() {
-    const { id } = useParams();
-    const navigate = useNavigate();
-    const [task, setTask] = useState(null);
-    const [comments, setComments] = useState([]);
-    const [message, setMessage] = useState('');
-    const [users, setUsers] = useState([]);
-    const [statuses, setStatuses] = useState([]);
-    const [editMode, setEditMode] = useState(false);
-    const [form, setForm] = useState({ title: '', description: '', status_id: '', assigned_to: '' });
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const [task, setTask] = useState(null);
+  const [comments, setComments] = useState([]);
+  const [message, setMessage] = useState('');
+  const [users, setUsers] = useState([]);
+  const [statuses, setStatuses] = useState([]);
+  const [editMode, setEditMode] = useState(false);
+  const [form, setForm] = useState({
+    title: '',
+    description: '',
+    status_id: '',
+    assigned_to: '',
+  });
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const statusLabel = getStatusLabel(task?.status_id, task?.status_name);
+  const statusKind = getStatusKind(task?.status_id, task?.status_name);
+  const currentUser = getCurrentUser();
 
-    useEffect(() => {
-        fetchTask();
-        fetchComments();
-        fetchUsersAndStatuses();
+  const fetchTask = useCallback(async () => {
+    const res = await api.get(`/tasks/${id}`);
+    setTask(res.data);
+    setForm({
+      title: res.data.title,
+      description: res.data.description || '',
+      status_id: res.data.status_id ? String(res.data.status_id) : 'none',
+      assigned_to: res.data.assigned_to ? String(res.data.assigned_to) : 'none',
+    });
+  }, [id]);
 
-        // Подключаемся к комнате задачи
-        socket.emit('join_task', id);
-        console.log(`🎧 Присоединились к комнате задачи ${id}`);
+  const fetchComments = useCallback(async () => {
+    const res = await api.get(`/tasks/${id}/comments`);
+    setComments(res.data);
+  }, [id]);
 
-        // Слушаем новые комментарии
-        socket.on('new_comment', (comment) => {
-            console.log('📩 Получен новый комментарий:', comment);
-            if (Number(comment.task_id) === Number(id)) {
-                setComments(prev => [...prev, comment]);
-            }
-        });
+  const fetchUsersAndStatuses = useCallback(async () => {
+    const [usersRes, statusesRes] = await Promise.all([
+      api.get('/users'),
+      api.get('/statuses'),
+    ]);
+    setUsers(usersRes.data);
+    setStatuses(statusesRes.data);
+  }, []);
 
-        // Логи подключения WebSocket
-        socket.on('connect', () => console.log('✅ WebSocket connected'));
-        socket.on('disconnect', () => console.log('❌ WebSocket disconnected'));
-        socket.on('connect_error', (err) => console.error('WebSocket error:', err));
+  useEffect(() => {
+    fetchTask();
+    fetchComments();
+    fetchUsersAndStatuses();
 
-        return () => {
-            socket.off('new_comment');
-            socket.off('connect');
-            socket.off('disconnect');
-            socket.off('connect_error');
-        };
-    }, [id]);
+    socket.emit('join_task', id);
+    console.log(`Joined task room ${id}`);
 
-    const fetchTask = async () => {
-        const res = await api.get(`/tasks/${id}`);
-        setTask(res.data);
-        setForm({
-            title: res.data.title,
-            description: res.data.description || '',
-            status_id: res.data.status_id || '',
-            assigned_to: res.data.assigned_to || ''
-        });
+    socket.on('new_comment', (comment) => {
+      if (String(comment.task_id) === String(id)) {
+        setComments((prev) => [...prev, comment]);
+      }
+    });
+
+    return () => {
+      socket.off('new_comment');
     };
+  }, [fetchComments, fetchTask, fetchUsersAndStatuses, id]);
 
-    const fetchComments = async () => {
-        const res = await api.get(`/tasks/${id}/comments`);
-        setComments(res.data);
+  useEffect(() => {
+    document.body.classList.add('tasks-background');
+
+    return () => {
+      document.body.classList.remove('tasks-background');
     };
+  }, []);
 
-    const fetchUsersAndStatuses = async () => {
-        const [usersRes, statusesRes] = await Promise.all([
-            api.get('/users'),
-            api.get('/statuses')
-        ]);
-        setUsers(usersRes.data);
-        setStatuses(statusesRes.data);
-    };
+  const handleSubmitComment = (e) => {
+    e.preventDefault();
+    if (!message.trim()) return;
+    socket.emit('send_comment', { taskId: id, message });
+    setMessage('');
+  };
 
-    const handleSubmitComment = async (e) => {
-        e.preventDefault();
-        if (!message.trim()) return;
-        console.log('📤 Отправка сообщения:', message);
-        socket.emit('send_comment', { taskId: id, message });
-        setMessage('');
-    };
+  const handleUpdateTask = async (e) => {
+    e.preventDefault();
+    await api.put(`/tasks/${id}`, {
+      ...form,
+      status_id: form.status_id === 'none' ? null : form.status_id,
+      assigned_to: form.assigned_to === 'none' ? null : form.assigned_to,
+    });
+    setEditMode(false);
+    fetchTask();
+  };
 
-    const handleUpdateTask = async (e) => {
-        e.preventDefault();
-        await api.put(`/tasks/${id}`, form);
-        setEditMode(false);
-        fetchTask();
-    };
+  const handleDelete = async () => {
+    await api.delete(`/tasks/${id}`);
+    navigate('/tasks');
+  };
 
-    const handleDelete = async () => {
-        if (confirm('Удалить задачу?')) {
-            await api.delete(`/tasks/${id}`);
-            navigate('/tasks');
-        }
-    };
+  if (!task) {
+    return <div className="tasks-loading">Загрузка...</div>;
+  }
 
-    if (!task) return <div>Загрузка...</div>;
+  return (
+    <main className="task-detail-page">
+      <header className={`task-detail-hero task-detail-hero--${statusKind}`}>
+        <div className="task-detail-hero-copy">
+          <Button className="task-detail-back-button" onClick={() => navigate('/tasks')}>
+            <ArrowLeft aria-hidden="true" />
+            К задачам
+          </Button>
 
-    return (
-        <div className="container mx-auto p-4">
-            <div className="mb-4 flex justify-between items-center">
-                <h1 className="text-3xl font-bold">Задача #{id}</h1>
-                <div>
-                    <button onClick={() => setEditMode(!editMode)} className="bg-blue-500 text-white px-4 py-2 rounded mr-2">
-                        {editMode ? 'Отмена' : 'Редактировать'}
-                    </button>
-                    <button onClick={handleDelete} className="bg-red-500 text-white px-4 py-2 rounded">Удалить</button>
-                </div>
-            </div>
+          <div>
+            <p className="task-detail-kicker">Задача #{id}</p>
+            <h1>{task.title}</h1>
+            <p className="task-detail-hero-description">
+              {task.description || 'Описание отсутствует'}
+            </p>
+          </div>
 
-            {editMode ? (
-                <form onSubmit={handleUpdateTask} className="mb-6 border p-4 rounded">
-                    <input type="text" value={form.title} onChange={e => setForm({...form, title: e.target.value})} className="w-full p-2 border rounded mb-2" required />
-                    <textarea value={form.description} onChange={e => setForm({...form, description: e.target.value})} className="w-full p-2 border rounded mb-2" rows="3" />
-                    <select value={form.status_id} onChange={e => setForm({...form, status_id: e.target.value})} className="w-full p-2 border rounded mb-2">
-                        <option value="">Без статуса</option>
-                        {statuses.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                    </select>
-                    <select value={form.assigned_to} onChange={e => setForm({...form, assigned_to: e.target.value})} className="w-full p-2 border rounded mb-2">
-                        <option value="">Не назначен</option>
-                        {users.map(u => <option key={u.id} value={u.id}>{u.username}</option>)}
-                    </select>
-                    <button type="submit" className="bg-green-500 text-white px-4 py-2 rounded">Сохранить</button>
-                </form>
-            ) : (
-                <div className="mb-6 border p-4 rounded">
-                    <p><strong>Название:</strong> {task.title}</p>
-                    <p><strong>Описание:</strong> {task.description || '—'}</p>
-                    <p><strong>Статус:</strong> {task.status_name || '—'}</p>
-                    <p><strong>Ответственный:</strong> {task.assigned_name || '—'}</p>
-                    <p><strong>Дата создания:</strong> {new Date(task.created_at).toLocaleDateString()}</p>
-                </div>
-            )}
-
-            <div className="mt-8">
-                <h2 className="text-2xl font-bold mb-4">Чат</h2>
-                <div className="border rounded p-4 h-80 overflow-y-auto mb-4 bg-gray-50">
-                    {comments.map(c => (
-                        <div key={c.id} className="mb-2">
-                            <strong>{c.username}</strong> <small className="text-gray-500">{new Date(c.created_at).toLocaleString()}</small>
-                            <p>{c.message}</p>
-                        </div>
-                    ))}
-                </div>
-                <form onSubmit={handleSubmitComment} className="flex gap-2">
-                    <input type="text" value={message} onChange={e => setMessage(e.target.value)} placeholder="Ваше сообщение..." className="flex-1 p-2 border rounded" required />
-                    <button type="submit" className="bg-blue-500 text-white px-4 py-2 rounded">Отправить</button>
-                </form>
-            </div>
+          <div className="task-detail-meta-row">
+            <span className="task-status-badge">
+              <span className="task-status-dot" />
+              {statusLabel}
+            </span>
+            <span className="task-detail-meta-pill">
+              <UserRound aria-hidden="true" />
+              {task.assigned_name || 'Не назначен'}
+            </span>
+            <span className="task-detail-meta-pill">
+              <CalendarDays aria-hidden="true" />
+              {formatDate(task.created_at)}
+            </span>
+          </div>
         </div>
-    );
+
+        <div className="task-detail-actions">
+          <Button
+            className="task-detail-secondary-button"
+            onClick={() => setEditMode(!editMode)}
+          >
+            {editMode ? 'Отмена' : 'Редактировать'}
+          </Button>
+          <Button
+            className="task-detail-danger-button"
+            onClick={() => setDeleteDialogOpen(true)}
+          >
+            <Trash2 aria-hidden="true" />
+            Удалить
+          </Button>
+        </div>
+      </header>
+
+      <div className="task-detail-grid">
+        <section className="task-detail-panel task-detail-info-panel">
+          <div className="task-detail-section-head">
+            <span>Информация</span>
+            <strong>{editMode ? 'Режим редактирования' : 'Просмотр задачи'}</strong>
+          </div>
+
+          {editMode ? (
+            <form onSubmit={handleUpdateTask} className="task-detail-form">
+              <label className="task-detail-label">
+                <span>Название</span>
+                <Input
+                  className="task-detail-field"
+                  value={form.title}
+                  onChange={(e) => setForm({ ...form, title: e.target.value })}
+                  placeholder="Название задачи"
+                  required
+                />
+              </label>
+
+              <label className="task-detail-label">
+                <span>Описание</span>
+                <Textarea
+                  className="task-detail-field task-detail-textarea"
+                  value={form.description}
+                  onChange={(e) => setForm({ ...form, description: e.target.value })}
+                  placeholder="Что нужно сделать?"
+                  rows={5}
+                />
+              </label>
+
+              <div className="task-detail-form-grid">
+                <label className="task-detail-label">
+                  <span>Статус</span>
+                  <Select
+                    value={form.status_id}
+                    onValueChange={(value) => setForm({ ...form, status_id: value })}
+                  >
+                    <SelectTrigger className="task-detail-select">
+                      <SelectValue placeholder="Статус" />
+                    </SelectTrigger>
+                    <SelectContent position="popper" className="task-detail-select-menu">
+                      <SelectItem value="none">Без статуса</SelectItem>
+                      {statuses.map((s) => (
+                        <SelectItem key={s.id} value={String(s.id)}>
+                          {getStatusLabel(s.id, s.name)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </label>
+
+                <label className="task-detail-label">
+                  <span>Ответственный</span>
+                  <Select
+                    value={form.assigned_to}
+                    onValueChange={(value) => setForm({ ...form, assigned_to: value })}
+                  >
+                    <SelectTrigger className="task-detail-select">
+                      <SelectValue placeholder="Ответственный" />
+                    </SelectTrigger>
+                    <SelectContent position="popper" className="task-detail-select-menu">
+                      <SelectItem value="none">Не назначен</SelectItem>
+                      {users.map((u) => (
+                        <SelectItem key={u.id} value={String(u.id)}>
+                          {u.username}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </label>
+              </div>
+
+              <Button type="submit" className="task-detail-save-button">
+                <Save aria-hidden="true" />
+                Сохранить изменения
+              </Button>
+            </form>
+          ) : (
+            <div className="task-detail-summary">
+              <div>
+                <span className="task-detail-summary-label">Название</span>
+                <h2>{task.title}</h2>
+              </div>
+
+              <div>
+                <span className="task-detail-summary-label">Описание</span>
+                <p>{task.description || 'Описание отсутствует'}</p>
+              </div>
+
+              <div className="task-detail-stats">
+                <div>
+                  <span>Статус</span>
+                  <strong>{statusLabel}</strong>
+                </div>
+                <div>
+                  <span>Ответственный</span>
+                  <strong>{task.assigned_name || 'Не назначен'}</strong>
+                </div>
+                <div>
+                  <span>Дата создания</span>
+                  <strong>{formatDate(task.created_at)}</strong>
+                </div>
+              </div>
+            </div>
+          )}
+        </section>
+
+        <section className="task-detail-panel task-chat-panel">
+          <div className="task-chat-head">
+            <div>
+              <span>Обсуждение</span>
+              <h2>Чат задачи</h2>
+            </div>
+            <div className="task-chat-counter">
+              <MessageCircle aria-hidden="true" />
+              {comments.length}
+            </div>
+          </div>
+
+          <div className="task-chat-list">
+            {comments.length === 0 ? (
+              <div className="task-chat-empty">
+                <MessageCircle aria-hidden="true" />
+                <strong>Пока нет сообщений</strong>
+                <span>Напишите первое сообщение по задаче.</span>
+              </div>
+            ) : (
+              comments.map((comment) => {
+                const isOwnMessage =
+                  Number(comment.user_id) === Number(currentUser.id) ||
+                  comment.username === currentUser.username;
+
+                return (
+                  <article
+                    key={comment.id}
+                    className={`task-message ${isOwnMessage ? 'task-message--own' : ''}`}
+                  >
+                    <div className="task-message-bubble">
+                      <div className="task-message-meta">
+                        <strong>{comment.username || 'Пользователь'}</strong>
+                        <time>{formatDateTime(comment.created_at)}</time>
+                      </div>
+                      <p>{comment.message}</p>
+                    </div>
+                  </article>
+                );
+              })
+            )}
+          </div>
+
+          <form onSubmit={handleSubmitComment} className="task-chat-form">
+            <Input
+              className="task-chat-input"
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              placeholder="Ваше сообщение..."
+              required
+            />
+            <Button type="submit" className="task-chat-send-button">
+              <Send aria-hidden="true" />
+            </Button>
+          </form>
+        </section>
+      </div>
+
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent className="task-delete-dialog">
+          <DialogHeader>
+            <DialogTitle>Подтверждение удаления</DialogTitle>
+            <DialogDescription>
+              Вы уверены, что хотите удалить задачу? Это действие нельзя отменить.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              className="task-detail-secondary-button"
+              onClick={() => setDeleteDialogOpen(false)}
+            >
+              Отмена
+            </Button>
+            <Button
+              className="task-detail-danger-button"
+              onClick={handleDelete}
+            >
+              <Trash2 aria-hidden="true" />
+              Удалить
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </main>
+  );
 }
