@@ -1,27 +1,123 @@
 <!DOCTYPE html>
-<html>
+<html lang="ru">
 <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Вход | Task Manager</title>
     <style>
-        body { font-family: Arial; margin: 40px; }
-        .form { max-width: 300px; margin: auto; }
-        input { width: 100%; padding: 8px; margin: 8px 0; }
-        button { padding: 10px; width: 100%; background: #28a745; color: white; border: none; cursor: pointer; }
-        .error { color: red; }
+        *, *::before, *::after { box-sizing: border-box; }
+        body {
+            min-height: 100vh;
+            margin: 0;
+            display: grid;
+            place-items: center;
+            padding: 24px;
+            font-family: Inter, Arial, sans-serif;
+            color: #fff;
+            background:
+                linear-gradient(115deg, rgba(3, 7, 18, 0.92), rgba(24, 24, 32, 0.62), rgba(3, 7, 18, 0.88)),
+                url('/brunetochka.png') center / cover no-repeat fixed,
+                #08080d;
+        }
+        .form {
+            width: min(100%, 420px);
+            border: 1px solid rgba(255, 255, 255, 0.14);
+            border-radius: 8px;
+            background: rgba(8, 8, 13, 0.74);
+            box-shadow: 0 28px 90px rgba(0, 0, 0, 0.46);
+            backdrop-filter: blur(22px);
+            padding: 28px;
+        }
+        h1 {
+            margin: 0;
+            text-align: center;
+            font-size: 30px;
+            line-height: 1.1;
+        }
+        .subtitle {
+            margin: 10px 0 24px;
+            text-align: center;
+            color: rgba(255, 255, 255, 0.64);
+            font-size: 14px;
+            line-height: 1.5;
+        }
+        .error {
+            margin: 0 0 14px;
+            border: 1px solid rgba(253, 164, 175, 0.24);
+            border-radius: 8px;
+            background: rgba(244, 63, 94, 0.14);
+            color: #ffe4e6;
+            padding: 10px 12px;
+            font-size: 14px;
+        }
+        label {
+            display: grid;
+            gap: 8px;
+            margin-bottom: 14px;
+            color: rgba(255, 255, 255, 0.76);
+            font-size: 14px;
+            font-weight: 600;
+        }
+        input {
+            width: 100%;
+            min-height: 44px;
+            border: 1px solid rgba(255, 255, 255, 0.14);
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.08);
+            color: #fff;
+            padding: 0 12px;
+            font-size: 15px;
+            outline: none;
+        }
+        input::placeholder { color: rgba(255, 255, 255, 0.4); }
+        input:focus {
+            border-color: rgba(186, 230, 253, 0.58);
+            box-shadow: 0 0 0 3px rgba(186, 230, 253, 0.14);
+        }
+        button {
+            width: 100%;
+            min-height: 44px;
+            margin-top: 4px;
+            border: 0;
+            border-radius: 8px;
+            background: #fff;
+            color: #09090b;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 800;
+        }
+        .switch {
+            margin: 22px 0 0;
+            text-align: center;
+            color: rgba(255, 255, 255, 0.64);
+            font-size: 14px;
+        }
+        a {
+            color: #fff;
+            font-weight: 700;
+            text-underline-offset: 4px;
+        }
     </style>
 </head>
 <body>
-    <div class="form">
-        <h1>Вход</h1>
+    <main class="form">
+        <h1>Вход в аккаунт</h1>
+        <p class="subtitle">Введите email и пароль, чтобы продолжить работу с задачами.</p>
         {{#if error}}
             <p class="error">{{error}}</p>
         {{/if}}
         <form method="POST">
-            <input type="email" name="email" placeholder="Email" required>
-            <input type="password" name="password" placeholder="Пароль" required>
+            <label>
+                Email
+                <input type="email" name="email" placeholder="example@mail.com" required>
+            </label>
+            <label>
+                Пароль
+                <input type="password" name="password" placeholder="••••••••" required>
+            </label>
             <button type="submit">Войти</button>
         </form>
-        <p style="text-align:center">Нет аккаунта? <a href="/register">Регистрация</a></p>
-    </div>
+        <p class="switch">Нет аккаунта? <a href="/register">Зарегистрироваться</a></p>
+    </main>
 </body>
 </html>

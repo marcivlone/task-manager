@@ -25,6 +25,7 @@ app.set('views', path.join(__dirname, 'views'));
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.use(express.static('public'));
+app.use(express.static(path.join(__dirname, 'client', 'public')));
 
 // CORS для React (разрешаем запросы с localhost:5173)
 app.use(cors({
@@ -34,7 +35,7 @@ app.use(cors({
 
 // Сессии (для старых Handlebars-страниц)
 const PgSession = require('connect-pg-simple')(session);
-app.use(session({
+const sessionMiddleware = session({
     store: new PgSession({ pool: db, tableName: 'session', createTableIfMissing: true }),
     secret: process.env.SESSION_SECRET || 'mysecretkey',
     resave: false,
@@ -45,7 +46,8 @@ app.use(session({
         sameSite: 'lax',
         maxAge: 30 * 24 * 60 * 60 * 1000
     }
-}));
+});
+app.use(sessionMiddleware);
 
 // Middleware для Handlebars-авторизации
 function requireAuth(req, res, next) {
@@ -279,24 +281,44 @@ const io = require('socket.io')(server, {
   }
 });
 io.use((socket, next) => {
-    const sessionMiddleware = session({
-        store: new PgSession({ pool: db, tableName: 'session', createTableIfMissing: true }),
-        secret: process.env.SESSION_SECRET || 'mysecretkey',
-        resave: false,
-        saveUninitialized: false
+    const authToken = socket.handshake.auth?.token;
+    const authHeader = socket.handshake.headers?.authorization;
+    const bearerToken = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
+    const token = authToken || bearerToken;
+
+    if (token) {
+        try {
+            socket.user = jwt.verify(token, JWT_SECRET);
+            return next();
+        } catch (err) {
+            return next(new Error('invalid token'));
+        }
+    }
+
+    sessionMiddleware(socket.request, {}, () => {
+        const socketSession = socket.request.session;
+
+        if (socketSession?.userId) {
+            socket.user = {
+                id: socketSession.userId,
+                username: socketSession.username,
+            };
+        }
+
+        next();
     });
-    sessionMiddleware(socket.request, {}, next);
 });
 io.on('connection', (socket) => {
     const session = socket.request.session;
-    const userId = session.userId;
-    const username = session.username;
+    const userId = socket.user?.id || session?.userId;
+    const username = socket.user?.username || session?.username;
     if (!userId) { 
         socket.disconnect(); 
         return; 
     }
     console.log(`Пользователь ${username} (id:${userId}) подключился`);
     socket.on('join_task', (taskId) => { socket.join(`task_${taskId}`); });
+    socket.on('leave_task', (taskId) => { socket.leave(`task_${taskId}`); });
     socket.on('send_comment', async (data) => {
         const { taskId, message } = data;
         if (!message.trim()) return;

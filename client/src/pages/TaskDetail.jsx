@@ -30,9 +30,12 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 
-const socket = io('http://localhost:3000', {
+const socketUrl = import.meta.env.VITE_SOCKET_URL?.trim();
+const socketOptions = {
+  autoConnect: false,
   withCredentials: true,
-});
+};
+const socket = socketUrl ? io(socketUrl, socketOptions) : io(socketOptions);
 
 const FALLBACK_STATUS_LABELS = {
   1: 'Новая',
@@ -117,6 +120,7 @@ export default function TaskDetail() {
   const [task, setTask] = useState(null);
   const [comments, setComments] = useState([]);
   const [message, setMessage] = useState('');
+  const [chatError, setChatError] = useState('');
   const [users, setUsers] = useState([]);
   const [statuses, setStatuses] = useState([]);
   const [editMode, setEditMode] = useState(false);
@@ -130,6 +134,16 @@ export default function TaskDetail() {
   const statusLabel = getStatusLabel(task?.status_id, task?.status_name);
   const statusKind = getStatusKind(task?.status_id, task?.status_name);
   const currentUser = getCurrentUser();
+
+  const appendComment = useCallback((comment) => {
+    setComments((prev) => {
+      if (prev.some((item) => String(item.id) === String(comment.id))) {
+        return prev;
+      }
+
+      return [...prev, comment];
+    });
+  }, []);
 
   const fetchTask = useCallback(async () => {
     const res = await api.get(`/tasks/${id}`);
@@ -161,19 +175,39 @@ export default function TaskDetail() {
     fetchComments();
     fetchUsersAndStatuses();
 
-    socket.emit('join_task', id);
-    console.log(`Joined task room ${id}`);
+    const handleConnect = () => {
+      socket.emit('join_task', id);
+    };
 
-    socket.on('new_comment', (comment) => {
+    const handleNewComment = (comment) => {
       if (String(comment.task_id) === String(id)) {
-        setComments((prev) => [...prev, comment]);
+        appendComment(comment);
       }
-    });
+    };
+
+    const handleConnectError = (err) => {
+      console.warn('Socket connection error:', err.message);
+    };
+
+    socket.auth = { token: localStorage.getItem('token') || '' };
+    socket.on('connect', handleConnect);
+    socket.on('new_comment', handleNewComment);
+    socket.on('connect_error', handleConnectError);
+
+    if (socket.connected) {
+      handleConnect();
+    } else {
+      socket.connect();
+    }
 
     return () => {
-      socket.off('new_comment');
+      socket.emit('leave_task', id);
+      socket.off('connect', handleConnect);
+      socket.off('new_comment', handleNewComment);
+      socket.off('connect_error', handleConnectError);
+      socket.disconnect();
     };
-  }, [fetchComments, fetchTask, fetchUsersAndStatuses, id]);
+  }, [appendComment, fetchComments, fetchTask, fetchUsersAndStatuses, id]);
 
   useEffect(() => {
     document.body.classList.add('tasks-background');
@@ -183,11 +217,25 @@ export default function TaskDetail() {
     };
   }, []);
 
-  const handleSubmitComment = (e) => {
+  const handleSubmitComment = async (e) => {
     e.preventDefault();
-    if (!message.trim()) return;
-    socket.emit('send_comment', { taskId: id, message });
+    const text = message.trim();
+
+    if (!text) return;
+
     setMessage('');
+    setChatError('');
+
+    try {
+      const res = await api.post('/comments', {
+        task_id: id,
+        message: text,
+      });
+      appendComment(res.data);
+    } catch (err) {
+      setMessage(text);
+      setChatError(err.response?.data?.error || 'Не удалось отправить сообщение');
+    }
   };
 
   const handleUpdateTask = async (e) => {
@@ -410,6 +458,8 @@ export default function TaskDetail() {
               })
             )}
           </div>
+
+          {chatError && <div className="task-chat-error">{chatError}</div>}
 
           <form onSubmit={handleSubmitComment} className="task-chat-form">
             <Input

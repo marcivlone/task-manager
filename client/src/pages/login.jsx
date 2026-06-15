@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { LogIn, LockKeyhole, Mail } from 'lucide-react';
 import api from '../api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -17,6 +18,7 @@ export default function Login() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setError('');
 
     try {
       const response = await api.post('/login', {
@@ -34,77 +36,80 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex items-center">
-      <div className="w-full max-w-7xl mx-auto px-[8%]">
-        <Card className="w-[460px] bg-black/25 backdrop-blur-xl border border-white/10 shadow-2xl rounded-3xl text-white">
-          <CardHeader className="pb-6 text-center">
-            <CardTitle className="text-4xl font-extrabold text-white drop-shadow-[0_0_12px_rgba(255,255,255,0.4)]">
-              Добро пожаловать
-            </CardTitle>
+    <main className="auth-page">
+      <Card className="auth-card">
+        <CardHeader className="auth-header">
+          <div className="auth-icon">
+            <LogIn aria-hidden="true" />
+          </div>
 
-            <CardDescription className="text-slate-200 text-base">
-              Войдите в свой аккаунт
-            </CardDescription>
-          </CardHeader>
+          <CardTitle className="auth-title">
+            Вход в аккаунт
+          </CardTitle>
 
-          <CardContent>
-            {error && (
-              <div className="bg-red-500/20 border border-red-500/30 text-red-200 p-3 rounded-xl mb-4 text-sm">
-                {error}
-              </div>
-            )}
+          <CardDescription className="auth-description">
+            Введите email и пароль, чтобы продолжить работу с задачами.
+          </CardDescription>
+        </CardHeader>
 
-            <form onSubmit={handleSubmit} className="space-y-5">
-              <div className="space-y-2">
-                <label className="text-sm text-white">
-                  Email
-                </label>
+        <CardContent className="auth-content">
+          {error && (
+            <div className="auth-error">
+              {error}
+            </div>
+          )}
 
+          <form onSubmit={handleSubmit} className="auth-form">
+            <label className="auth-label">
+              <span>Email</span>
+              <span className="auth-input-wrap">
+                <Mail aria-hidden="true" className="auth-field-icon" />
                 <Input
                   type="email"
                   placeholder="example@mail.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
-                  className="h-11 bg-white/10 border-white/20 text-white placeholder:text-white/50"
+                  className="auth-input"
                 />
-              </div>
+              </span>
+            </label>
 
-              <div className="space-y-2">
-                <label className="text-sm text-white">
-                  Пароль
-                </label>
-
+            <label className="auth-label">
+              <span>Пароль</span>
+              <span className="auth-input-wrap">
+                <LockKeyhole aria-hidden="true" className="auth-field-icon" />
                 <Input
                   type="password"
                   placeholder="••••••••"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
-                  className="h-11 bg-white/10 border-white/20 text-white placeholder:text-white/50"
+                  className="auth-input"
                 />
-              </div>
+              </span>
+            </label>
 
-              <Button
-                type="submit"
-                className="w-full h-11 text-base rounded-xl"
-              >
-                Войти
-              </Button>
-            </form>
+            <Button
+              type="submit"
+              className="auth-submit"
+            >
+              <LogIn aria-hidden="true" />
+              Войти
+            </Button>
+          </form>
 
-            <p className="mt-6 text-center text-sm text-white/70">
-              Нет аккаунта?{' '}
-              <a
-                href="/register"
-                className="text-white hover:text-white/80 underline"
-              >
-                Зарегистрироваться
-              </a>
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-    </div>
+          <p className="auth-switch">
+            Нет аккаунта?{' '}
+            <a
+              href="/register"
+              className="auth-link"
+            >
+              Зарегистрироваться
+            </a>
+          </p>
+        </CardContent>
+      </Card>
+    </main>
   );
 }

@@ -214,7 +214,7 @@ export default function Tasks() {
                     <SelectTrigger className="task-select">
                       <SelectValue placeholder="Без статуса" />
                     </SelectTrigger>
-                    <SelectContent className="task-select-menu">
+                    <SelectContent position="popper" className="task-select-menu">
                       <SelectItem value="none">Без статуса</SelectItem>
                       {Array.isArray(statuses) && statuses.map((status) => (
                         <SelectItem key={status.id} value={String(status.id)}>
@@ -230,7 +230,7 @@ export default function Tasks() {
                     <SelectTrigger className="task-select">
                       <SelectValue placeholder="Не назначен" />
                     </SelectTrigger>
-                    <SelectContent className="task-select-menu">
+                    <SelectContent position="popper" className="task-select-menu">
                       <SelectItem value="none">Не назначен</SelectItem>
                       {Array.isArray(users) && users.map((user) => (
                         <SelectItem key={user.id} value={String(user.id)}>
@@ -264,7 +264,7 @@ export default function Tasks() {
               <SelectTrigger className="task-select">
                 <SelectValue placeholder="Все статусы" />
               </SelectTrigger>
-              <SelectContent className="task-select-menu">
+              <SelectContent position="popper" className="task-select-menu">
                 <SelectItem value="all">Все статусы</SelectItem>
                 {Array.isArray(statuses) && statuses.map((status) => (
                   <SelectItem key={status.id} value={String(status.id)}>
@@ -284,7 +284,7 @@ export default function Tasks() {
               <SelectTrigger className="task-select">
                 <SelectValue placeholder="Все ответственные" />
               </SelectTrigger>
-              <SelectContent className="task-select-menu">
+              <SelectContent position="popper" className="task-select-menu">
                 <SelectItem value="all">Все ответственные</SelectItem>
                 {Array.isArray(users) && users.map((user) => (
                   <SelectItem key={user.id} value={String(user.id)}>
@@ -304,7 +304,7 @@ export default function Tasks() {
               <SelectTrigger className="task-select">
                 <SelectValue placeholder="Без сортировки" />
               </SelectTrigger>
-              <SelectContent className="task-select-menu">
+              <SelectContent position="popper" className="task-select-menu">
                 <SelectItem value="none">Без сортировки</SelectItem>
                 <SelectItem value="title">По названию</SelectItem>
                 <SelectItem value="status">По статусу</SelectItem>

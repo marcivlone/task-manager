@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { LockKeyhole, Mail, UserRound, UserPlus } from 'lucide-react';
 import api from '../api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -19,6 +20,7 @@ export default function Register() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setError('');
 
     if (password !== confirm) {
       setError('Пароли не совпадают');
@@ -42,106 +44,109 @@ export default function Register() {
   };
 
   return (
-    <div className="min-h-screen flex items-center">
-      <div className="w-full max-w-7xl mx-auto px-[8%]">
-        <Card className="w-[500px] bg-black/25 backdrop-blur-xl border border-white/10 shadow-2xl rounded-3xl text-white">
-          <CardHeader className="pb-6 text-center">
-            <CardTitle className="text-3xl font-bold text-white">
-              Создать аккаунт
-            </CardTitle>
+    <main className="auth-page">
+      <Card className="auth-card auth-card--wide">
+        <CardHeader className="auth-header">
+          <div className="auth-icon">
+            <UserPlus aria-hidden="true" />
+          </div>
 
-            <CardDescription className="text-white/70">
-              Заполните поля для регистрации
-            </CardDescription>
-          </CardHeader>
+          <CardTitle className="auth-title">
+            Создать аккаунт
+          </CardTitle>
 
-          <CardContent>
-            {error && (
-              <div className="bg-red-500/20 border border-red-500/30 text-red-200 p-3 rounded-xl mb-4 text-sm">
-                {error}
-              </div>
-            )}
+          <CardDescription className="auth-description">
+            Заполните данные, чтобы перейти к задачам.
+          </CardDescription>
+        </CardHeader>
 
-            <form onSubmit={handleSubmit} className="space-y-5">
-              <div className="space-y-2">
-                <label className="text-sm text-white">
-                  Имя пользователя
-                </label>
+        <CardContent className="auth-content">
+          {error && (
+            <div className="auth-error">
+              {error}
+            </div>
+          )}
 
+          <form onSubmit={handleSubmit} className="auth-form">
+            <label className="auth-label">
+              <span>Имя пользователя</span>
+              <span className="auth-input-wrap">
+                <UserRound aria-hidden="true" className="auth-field-icon" />
                 <Input
                   placeholder="ivan123"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                   required
-                  className="h-11 bg-white/10 border-white/20 text-white placeholder:text-white/50"
+                  className="auth-input"
                 />
-              </div>
+              </span>
+            </label>
 
-              <div className="space-y-2">
-                <label className="text-sm text-white">
-                  Email
-                </label>
-
+            <label className="auth-label">
+              <span>Email</span>
+              <span className="auth-input-wrap">
+                <Mail aria-hidden="true" className="auth-field-icon" />
                 <Input
                   type="email"
                   placeholder="example@mail.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
-                  className="h-11 bg-white/10 border-white/20 text-white placeholder:text-white/50"
+                  className="auth-input"
                 />
-              </div>
+              </span>
+            </label>
 
-              <div className="space-y-2">
-                <label className="text-sm text-white">
-                  Пароль
-                </label>
-
+            <label className="auth-label">
+              <span>Пароль</span>
+              <span className="auth-input-wrap">
+                <LockKeyhole aria-hidden="true" className="auth-field-icon" />
                 <Input
                   type="password"
                   placeholder="••••••••"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
-                  className="h-11 bg-white/10 border-white/20 text-white placeholder:text-white/50"
+                  className="auth-input"
                 />
-              </div>
+              </span>
+            </label>
 
-              <div className="space-y-2">
-                <label className="text-sm text-white">
-                  Повторите пароль
-                </label>
-
+            <label className="auth-label">
+              <span>Повторите пароль</span>
+              <span className="auth-input-wrap">
+                <LockKeyhole aria-hidden="true" className="auth-field-icon" />
                 <Input
                   type="password"
                   placeholder="••••••••"
                   value={confirm}
                   onChange={(e) => setConfirm(e.target.value)}
                   required
-                  className="h-11 bg-white/10 border-white/20 text-white placeholder:text-white/50"
+                  className="auth-input"
                 />
-              </div>
+              </span>
+            </label>
 
-              <Button
-                type="submit"
-                className="w-full h-11 text-base rounded-xl"
-              >
-                Зарегистрироваться
-              </Button>
-            </form>
+            <Button
+              type="submit"
+              className="auth-submit"
+            >
+              <UserPlus aria-hidden="true" />
+              Зарегистрироваться
+            </Button>
+          </form>
 
-            <p className="mt-6 text-center text-sm text-white/70">
-              Уже есть аккаунт?{' '}
-              <a
-                href="/login"
-                className="text-white hover:text-white/80 underline"
-              >
-                Войти
-              </a>
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-    </div>
+          <p className="auth-switch">
+            Уже есть аккаунт?{' '}
+            <a
+              href="/login"
+              className="auth-link"
+            >
+              Войти
+            </a>
+          </p>
+        </CardContent>
+      </Card>
+    </main>
   );
 }
