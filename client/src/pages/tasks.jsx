@@ -9,6 +9,13 @@ import {
   UserRound,
 } from 'lucide-react';
 import api from '../api';
+import {
+  buildTaskPayload,
+  formatTaskDate,
+  getStatusKind,
+  getStatusLabel,
+  normalizeFilterValue,
+} from '@/lib/taskUtils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -26,48 +33,6 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
-
-const FALLBACK_STATUS_LABELS = {
-  1: 'Новая',
-  2: 'В работе',
-  3: 'Завершена',
-};
-
-const getStatusLabel = (statusId, statusName) => {
-  if (statusName && !statusName.includes('?')) {
-    return statusName;
-  }
-
-  return FALLBACK_STATUS_LABELS[Number(statusId)] || 'Новая';
-};
-
-const getStatusKind = (statusId, statusName) => {
-  const label = getStatusLabel(statusId, statusName).toLowerCase();
-
-  if (Number(statusId) === 3 || label.includes('done') || label.includes('готов') || label.includes('выполн') || label.includes('заверш')) {
-    return 'done';
-  }
-
-  if (Number(statusId) === 2 || label.includes('progress') || label.includes('работ') || label.includes('процесс')) {
-    return 'progress';
-  }
-
-  if (label.includes('block') || label.includes('ошиб') || label.includes('проблем')) {
-    return 'blocked';
-  }
-
-  return 'new';
-};
-
-const formatTaskDate = (date) => {
-  const parsedDate = new Date(date);
-
-  if (Number.isNaN(parsedDate.getTime())) {
-    return 'Без даты';
-  }
-
-  return parsedDate.toLocaleDateString('ru-RU');
-};
 
 export default function Tasks() {
   const navigate = useNavigate();
@@ -119,7 +84,7 @@ export default function Tasks() {
   }, []);
 
   const handleFilterChange = (key, value) => {
-    const actualValue = value === 'all' || value === 'none' ? '' : value;
+    const actualValue = normalizeFilterValue(value);
     setFilters((prev) => ({ ...prev, [key]: actualValue }));
   };
 
@@ -129,12 +94,7 @@ export default function Tasks() {
       return;
     }
 
-    const payload = {
-      title: newTask.title,
-      description: newTask.description,
-      status_id: newTask.status_id === 'none' ? null : newTask.status_id,
-      assigned_to: newTask.assigned_to === 'none' ? null : newTask.assigned_to,
-    };
+    const payload = buildTaskPayload(newTask);
 
     try {
       const response = await api.post('/tasks', payload);

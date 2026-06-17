@@ -11,6 +11,15 @@ import {
 } from 'lucide-react';
 import { io } from 'socket.io-client';
 import api from '../api';
+import {
+  NO_STATUS_LABEL,
+  buildTaskPayload,
+  formatTaskDate as formatDate,
+  formatTaskDateTime as formatDateTime,
+  getStatusKind,
+  getStatusLabel,
+  parseStoredUser,
+} from '@/lib/taskUtils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -37,83 +46,6 @@ const socketOptions = {
 };
 const socket = socketUrl ? io(socketUrl, socketOptions) : io(socketOptions);
 
-const FALLBACK_STATUS_LABELS = {
-  1: 'Новая',
-  2: 'В работе',
-  3: 'Завершена',
-};
-
-const getStatusLabel = (statusId, statusName) => {
-  if (statusName && !statusName.includes('?')) {
-    return statusName;
-  }
-
-  return FALLBACK_STATUS_LABELS[Number(statusId)] || 'Без статуса';
-};
-
-const getStatusKind = (statusId, statusName) => {
-  const label = getStatusLabel(statusId, statusName).toLowerCase();
-
-  if (
-    Number(statusId) === 3 ||
-    label.includes('done') ||
-    label.includes('готов') ||
-    label.includes('выполн') ||
-    label.includes('заверш')
-  ) {
-    return 'done';
-  }
-
-  if (
-    Number(statusId) === 2 ||
-    label.includes('progress') ||
-    label.includes('работ') ||
-    label.includes('процесс')
-  ) {
-    return 'progress';
-  }
-
-  if (label.includes('block') || label.includes('ошиб') || label.includes('проблем')) {
-    return 'blocked';
-  }
-
-  return 'new';
-};
-
-const formatDate = (date) => {
-  const parsedDate = new Date(date);
-
-  if (Number.isNaN(parsedDate.getTime())) {
-    return 'Без даты';
-  }
-
-  return parsedDate.toLocaleDateString('ru-RU');
-};
-
-const formatDateTime = (date) => {
-  const parsedDate = new Date(date);
-
-  if (Number.isNaN(parsedDate.getTime())) {
-    return '';
-  }
-
-  return parsedDate.toLocaleString('ru-RU', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-};
-
-const getCurrentUser = () => {
-  try {
-    return JSON.parse(localStorage.getItem('user') || '{}');
-  } catch {
-    return {};
-  }
-};
-
 export default function TaskDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -131,9 +63,9 @@ export default function TaskDetail() {
     assigned_to: '',
   });
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const statusLabel = getStatusLabel(task?.status_id, task?.status_name);
+  const statusLabel = getStatusLabel(task?.status_id, task?.status_name, NO_STATUS_LABEL);
   const statusKind = getStatusKind(task?.status_id, task?.status_name);
-  const currentUser = getCurrentUser();
+  const currentUser = parseStoredUser(localStorage.getItem('user'));
 
   const appendComment = useCallback((comment) => {
     setComments((prev) => {
@@ -240,11 +172,7 @@ export default function TaskDetail() {
 
   const handleUpdateTask = async (e) => {
     e.preventDefault();
-    await api.put(`/tasks/${id}`, {
-      ...form,
-      status_id: form.status_id === 'none' ? null : form.status_id,
-      assigned_to: form.assigned_to === 'none' ? null : form.assigned_to,
-    });
+    await api.put(`/tasks/${id}`, buildTaskPayload(form));
     setEditMode(false);
     fetchTask();
   };
@@ -353,7 +281,7 @@ export default function TaskDetail() {
                       <SelectItem value="none">Без статуса</SelectItem>
                       {statuses.map((s) => (
                         <SelectItem key={s.id} value={String(s.id)}>
-                          {getStatusLabel(s.id, s.name)}
+                          {getStatusLabel(s.id, s.name, NO_STATUS_LABEL)}
                         </SelectItem>
                       ))}
                     </SelectContent>
