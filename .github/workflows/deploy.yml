@@ -31,7 +31,31 @@ jobs:
         run: npm --prefix client ci
 
       - name: Run tests
-        run: npm test
+        run: npm run test:ci
+
+      - name: Upload test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-report
+          path: client/test-results/junit.xml
+
+      - name: Add test report summary
+        if: always()
+        run: |
+          echo "### Unit test report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ -f client/test-results/junit.xml ]; then
+            echo "| Metric | Value |" >> $GITHUB_STEP_SUMMARY
+            echo "| --- | --- |" >> $GITHUB_STEP_SUMMARY
+            grep "<!-- tests " client/test-results/junit.xml | sed 's/.*<!-- tests /| Tests | /; s/ -->/ |/' >> $GITHUB_STEP_SUMMARY
+            grep "<!-- pass " client/test-results/junit.xml | sed 's/.*<!-- pass /| Passed | /; s/ -->/ |/' >> $GITHUB_STEP_SUMMARY
+            grep "<!-- fail " client/test-results/junit.xml | sed 's/.*<!-- fail /| Failed | /; s/ -->/ |/' >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Full JUnit report is available in the unit-test-report artifact." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "JUnit report was not generated." >> $GITHUB_STEP_SUMMARY
+          fi
 
       # 4. Настраиваем SSH-ключ для доступа к серверу
       - name: Setup SSH Key

@@ -4,7 +4,8 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "npm --prefix client test"
+    "test": "npm --prefix client test",
+    "test:ci": "npm --prefix client run test:ci"
   },
   "keywords": [],
   "author": "",
